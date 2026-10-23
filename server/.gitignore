@@ -1,0 +1,9 @@
+node_modules
+dist
+data/media/*
+!data/media/.gitkeep
+.env
+*.log
+
+# saved guest voice messages
+data/voice/*

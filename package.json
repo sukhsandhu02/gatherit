@@ -1,0 +1,18 @@
+{
+  "name": "gather-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Decentralized, zero-friction event media capture and live streaming platform",
+  "workspaces": ["server", "web"],
+  "scripts": {
+    "start": "./run.sh",
+    "dev:server": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "build:server": "npm --prefix server run build",
+    "build:web": "npm --prefix web run build",
+    "db:push": "npm --prefix server run db:push",
+    "db:generate": "npm --prefix server run db:generate"
+  },
+  "keywords": ["gather", "event-media", "webrtc", "p2p-mesh", "react", "fastify"],
+  "license": "MIT"
+}

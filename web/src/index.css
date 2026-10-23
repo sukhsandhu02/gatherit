@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Gather palette: charcoal + electric blue */
+  --color-brand-50: #eef3ff;
+  --color-brand-100: #dbe5ff;
+  --color-brand-200: #bccfff;
+  --color-brand-300: #8dacff;
+  --color-brand-400: #5b82ff;
+  --color-brand-500: #3a63ff;
+  --color-brand-600: #2447f0;
+  --color-brand-700: #1c38c4;
+  --color-brand-800: #1b3099;
+  --color-brand-900: #1a2b78;
+  --color-slate-800: #23262d;
+  --color-slate-900: #16181d;
+  --color-slate-950: #0c0d10;
+
+  /* Japandi Sand Palette */
+  --color-sand-50: #fdfcf9;
+  --color-sand-100: #fbf9f5;
+  --color-sand-200: #f5f0e6;
+  --color-sand-300: #e7dfd3;
+  --color-sand-400: #d5c8b6;
+  --color-sand-500: #b3a28c;
+  --color-sand-600: #8c7b65;
+  --color-sand-700: #6e604e;
+  --color-sand-800: #4f4538;
+  --color-sand-900: #2b2621;
+  --color-sand-950: #161412;
+
+  /* Terracotta / Ceramic Clay */
+  --color-terracotta-50: #faf3f0;
+  --color-terracotta-100: #f5e6e0;
+  --color-terracotta-200: #ebd0c4;
+  --color-terracotta-300: #deb09d;
+  --color-terracotta-400: #cb8971;
+  --color-terracotta-500: #b46b4e;
+  --color-terracotta-600: #a05e44;
+  --color-terracotta-700: #854a34;
+  --color-terracotta-800: #6e3e2c;
+  --color-terracotta-900: #583325;
+
+  /* Zen Sage / Bamboo */
+  --color-sage-50: #f4f7f4;
+  --color-sage-100: #e5ede6;
+  --color-sage-200: #cbded0;
+  --color-sage-300: #a3c2ab;
+  --color-sage-400: #7aa484;
+  --color-sage-500: #53785e;
+  --color-sage-600: #44654e;
+  --color-sage-700: #375240;
+  --color-sage-800: #2c4133;
+  --color-sage-900: #24352a;
+}
+
+@layer base {
+  :root {
+    --brand-primary: #2447f0;       /* Electric blue */
+    --brand-primary-hover: #3a63ff;
+    --brand-accent: #334155;
+    --brand-bg: #f8fafc;           /* Clean cool-warm pearl background */
+    --brand-surface: #ffffff;
+    --brand-card: #f1f5f9;
+    --brand-border: #e2e8f0;
+    --brand-dark: #16181d;
+    --brand-muted: #64748b;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --brand-bg: #090b0e;
+    --brand-surface: #12151c;
+    --brand-card: #181c25;
+    --brand-border: #222734;
+    --brand-dark: #f8fafc;
+    --brand-muted: #94a3b8;
+  }
+
+  body {
+    background-color: var(--brand-bg);
+    color: var(--brand-dark);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+}
+
+
+/* ---- Landing animations ---- */
+@keyframes g-fade-up { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+@keyframes g-float { 0%,100% { transform: translateY(0) rotate(var(--r, 0deg)); } 50% { transform: translateY(-12px) rotate(var(--r, 0deg)); } }
+@keyframes g-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes g-ping { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.6); opacity: 0; } }
+@keyframes g-pop { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@keyframes g-blob { 0%,100% { border-radius: 3rem; transform: rotate(0); } 50% { border-radius: 4rem 2rem 4rem 2.5rem; transform: rotate(2deg); } }
+
+.g-hero-in { opacity: 0; animation: g-fade-up .8s cubic-bezier(.2,.7,.2,1) forwards; }
+.g-float { animation: g-float 6s ease-in-out infinite; }
+.g-marquee { animation: g-marquee 28s linear infinite; }
+.g-ping { animation: g-ping 2s ease-out infinite; }
+.g-pop { opacity: 0; animation: g-pop .6s cubic-bezier(.2,.7,.2,1) forwards; }
+.g-blob { animation: g-blob 10s ease-in-out infinite; }
+
+.g-reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1); transition-delay: var(--d, 0ms); }
+.g-reveal.g-in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .g-hero-in, .g-pop { animation: none; opacity: 1; }
+  .g-float, .g-marquee, .g-ping, .g-blob { animation: none; }
+  .g-reveal { opacity: 1; transform: none; transition: none; }
+}

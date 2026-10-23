@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#2447f0" />
+    <title>Gather</title>
+    <style>
+      body { margin: 0; background-color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; }
+      html.dark body { background-color: #090b0e; color: #f8fafc; }
+      #root:empty::before {
+        content: "Loading Gather...";
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        color: #94a3b8;
+        font-size: 13px;
+        letter-spacing: 0.02em;
+      }
+    </style>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('gather-theme');
+          var isDark = t === 'dark' || (t !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.colorScheme = 'light';
+          }
+        } catch(e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

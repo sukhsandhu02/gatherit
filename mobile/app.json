@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Gather",
+    "slug": "gather",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "gather",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gather.events",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Gather needs camera access so you can capture photos and stream live previews to the event host.",
+        "NSMicrophoneUsageDescription": "Gather needs microphone access to record audio with video clips.",
+        "NSPhotoLibraryUsageDescription": "Gather needs photo library access to save shared event photos to your camera roll."
+      }
+    },
+    "android": {
+      "package": "com.gather.events",
+      "adaptiveIcon": {
+        "backgroundColor": "#18181b",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Gather to access your camera to capture event memories."
+        }
+      ]
+    ]
+  }
+}
