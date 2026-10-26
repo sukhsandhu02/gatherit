@@ -15,6 +15,7 @@ import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { MEDIA_DIR, connectedHosts, connectedGuests, guestLiveShareConfigs, broadcastLiveStreamsUpdate } from '../index.js';
+import { retainEventMemory } from '../services/hindsight.js';
 
 const execAsync = promisify(exec);
 
@@ -482,6 +483,12 @@ export async function guestRoutes(fastify: FastifyInstance) {
         secure: req.protocol === 'https',
       });
 
+      // Fire-and-forget: retain join memory (does not affect response)
+      retainEventMemory(
+        eventRow.id,
+        `Guest ${newGuest.name} joined the event at ${new Date().toISOString()}`,
+      ).catch(() => {/* swallowed — hindsight.ts already logs */});
+
       return {
         success: true,
         token,
@@ -851,6 +858,12 @@ export async function guestRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Fire-and-forget: retain photo upload memory
+      retainEventMemory(
+        guest.eventId,
+        `Guest ${guest.name} uploaded a photo at ${new Date().toISOString()}`,
+      ).catch(() => {/* swallowed */});
+
       return { success: true, media: newMedia };
     });
 
@@ -863,6 +876,11 @@ export async function guestRoutes(fastify: FastifyInstance) {
       }
 
       const media = await saveUploadedVideo(guest, data);
+      // Fire-and-forget: retain video upload memory
+      retainEventMemory(
+        guest.eventId,
+        `Guest ${guest.name} uploaded a video at ${new Date().toISOString()}`,
+      ).catch(() => {/* swallowed */});
       return { success: true, media };
     });
 

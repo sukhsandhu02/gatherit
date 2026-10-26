@@ -8,6 +8,7 @@ import { eq, desc, and, inArray } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
 import { connectedGuests, MEDIA_DIR, VOICE_DIR } from '../index.js';
+import { recallEventMemory, isHindsightEnabled } from '../services/hindsight.js';
 
 export async function hostRoutes(fastify: FastifyInstance) {
   // Public status check
@@ -642,5 +643,50 @@ export async function hostRoutes(fastify: FastifyInstance) {
 
       return { success: true, count: deletedItems.length, deleted: deletedItems };
     });
+
+    // ── Hindsight AI Memory: Recall ───────────────────────────────────────────
+    protectedRoutes.post<{ Body: { query: string } }>(
+      '/api/host/memory/recall',
+      {
+        config: {
+          rateLimit: {
+            max: 10,
+            timeWindow: '1 minute',
+          },
+        },
+      },
+      async (req, reply) => {
+        const hostAuth = (req as any).hostAuth;
+        const { query } = req.body || {};
+
+        if (!query || typeof query !== 'string' || query.trim().length === 0) {
+          return reply.status(400).send({ error: 'query is required' });
+        }
+        if (query.length > 500) {
+          return reply.status(400).send({ error: 'query must be 500 characters or fewer' });
+        }
+
+        // Resolve the current event ID from the host session
+        let eventId: string | undefined = hostAuth?.eventId;
+        if (!eventId) {
+          const [first] = await db.select({ id: schema.event.id }).from(schema.event).limit(1);
+          eventId = first?.id;
+        }
+        if (!eventId) {
+          return reply.status(404).send({ error: 'No event found' });
+        }
+
+        if (!isHindsightEnabled()) {
+          return { results: [], unavailable: true };
+        }
+
+        const result = await recallEventMemory(eventId, query.trim());
+        if (!result) {
+          return { results: [], unavailable: true };
+        }
+
+        return { results: result.results };
+      },
+    );
   });
 }

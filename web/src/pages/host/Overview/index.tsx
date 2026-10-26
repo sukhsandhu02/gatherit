@@ -7,6 +7,8 @@ import {
   Radio,
   QrCode,
   ArrowUpRight,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { EventMetaCard } from '../Event/components/EventMetaCard';
@@ -17,6 +19,13 @@ export default function HostOverviewPage() {
   const [name, setName] = useState('');
   const [date, setDate] = useState('');
   const [savingMeta, setSavingMeta] = useState(false);
+
+  // Event Memory (Hindsight AI)
+  const [memoryQuery, setMemoryQuery] = useState('');
+  const [memoryResults, setMemoryResults] = useState<Array<{ text: string; type: string }> | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryUnavailable, setMemoryUnavailable] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | null>(null);
 
   const fetchOverview = async () => {
     try {
@@ -34,6 +43,30 @@ export default function HostOverviewPage() {
   useEffect(() => {
     fetchOverview();
   }, []);
+
+  const handleMemoryRecall = async () => {
+    const q = memoryQuery.trim();
+    if (!q) return;
+    setMemoryLoading(true);
+    setMemoryResults(null);
+    setMemoryUnavailable(false);
+    setMemoryError(null);
+    try {
+      const res: any = await api('/api/host/memory/recall', {
+        method: 'POST',
+        body: JSON.stringify({ query: q }),
+      });
+      if (res.unavailable) {
+        setMemoryUnavailable(true);
+      } else {
+        setMemoryResults(res.results ?? []);
+      }
+    } catch (err: any) {
+      setMemoryError(err.message || 'Failed to query event memory.');
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
 
   const handleSaveMeta = async () => {
     setSavingMeta(true);
@@ -170,6 +203,68 @@ export default function HostOverviewPage() {
             </div>
             <ArrowUpRight className="w-5 h-5 text-[#8c7e6c] group-hover:text-[#a05e44] dark:group-hover:text-[#deb09d] transition" />
           </a>
+        </div>
+
+        {/* Event Memory — Hindsight AI (additive, non-destructive) */}
+        <div className="bg-white dark:bg-[#201c19] border border-[#e7dfd3] dark:border-[#332b25] rounded-3xl p-6 shadow-xs space-y-4">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="w-4 h-4 text-[#a05e44] dark:text-[#deb09d]" />
+            <h3 className="text-sm font-semibold text-[#2b2621] dark:text-[#f5f2ec]">Event Memory</h3>
+          </div>
+          <p className="text-xs text-[#8c7e6c] dark:text-[#a69c8e]">
+            Ask anything about this event — guest activity, uploads, and more.
+          </p>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={memoryQuery}
+              onChange={(e) => setMemoryQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleMemoryRecall()}
+              placeholder="Ask about this event..."
+              maxLength={500}
+              className="flex-1 text-sm rounded-xl border border-[#e7dfd3] dark:border-[#332b25] bg-[#faf6ef] dark:bg-[#17120f] text-[#2b2621] dark:text-[#f5f2ec] placeholder-[#8c7e6c] dark:placeholder-[#a69c8e] px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#a05e44]/40"
+            />
+            <button
+              onClick={handleMemoryRecall}
+              disabled={memoryLoading || !memoryQuery.trim()}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#a05e44] hover:bg-[#8e5038] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold transition shadow-2xs"
+            >
+              {memoryLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              Ask
+            </button>
+          </div>
+
+          {/* Results */}
+          {memoryUnavailable && (
+            <p className="text-xs text-[#8c7e6c] dark:text-[#a69c8e] italic">
+              Event Memory is not configured. Add <code className="font-mono">HINDSIGHT_API_KEY</code> and{' '}
+              <code className="font-mono">HINDSIGHT_BASE_URL</code> to enable it.
+            </p>
+          )}
+          {memoryError && (
+            <p className="text-xs text-red-500 dark:text-red-400">{memoryError}</p>
+          )}
+          {memoryResults !== null && !memoryUnavailable && (
+            <div className="space-y-2">
+              {memoryResults.length === 0 ? (
+                <p className="text-xs text-[#8c7e6c] dark:text-[#a69c8e] italic">No memories found for that query.</p>
+              ) : (
+                memoryResults.map((r, i) => (
+                  <div
+                    key={i}
+                    className="text-xs text-[#2b2621] dark:text-[#f5f2ec] bg-[#faf3f0] dark:bg-[#2d1d17] border border-[#f0e5d8] dark:border-[#3a2a20] rounded-xl px-4 py-2.5"
+                  >
+                    {r.text}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
     </HostLayout>
