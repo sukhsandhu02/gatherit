@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HostLayout } from '../../../layouts/HostLayout';
-import { api } from '../../../lib/api';
+import { api, getMediaUrl } from '../../../lib/api';
 import { MediaGrid, type HostMediaItem } from './components/MediaGrid';
 import { SharePanel } from './components/SharePanel';
 import {
@@ -395,13 +395,13 @@ export default function HostGalleryPage() {
               <div className="bg-slate-950 flex items-center justify-center max-h-[70vh]">
                 {previewItem.kind === 'photo' ? (
                   <img
-                    src={previewItem.path}
+                    src={getMediaUrl(previewItem.path)}
                     alt="Preview"
                     className="max-h-[70vh] w-auto object-contain"
                   />
                 ) : (
                   <video
-                    src={previewItem.path}
+                    src={getMediaUrl(previewItem.path)}
                     controls
                     autoPlay
                     className="max-h-[70vh] w-auto object-contain"

@@ -7,6 +7,7 @@ import { PassesTable } from './components/PassesTable';
 import { CreatePassDrawer } from './components/CreatePassDrawer';
 import { QrShareModal } from './components/QrShareModal';
 import { ThemeToggle } from '../../components/ThemeToggle';
+import { api } from '../../lib/api';
 
 export default function HostPasses() {
   const navigate = useNavigate();
@@ -25,15 +26,14 @@ export default function HostPasses() {
 
   const fetchPasses = async () => {
     try {
-      const res = await fetch('/api/host/passes');
-      if (res.status === 401 || res.status === 403) {
-        navigate('/host/setup');
-        return;
-      }
-      const data = await res.json();
+      const data = await api('/api/host/passes');
       setPasses(data.passes || []);
       setGroups(data.groups || []);
     } catch (err: any) {
+      if (err.status === 401 || err.status === 403) {
+        navigate('/host/setup');
+        return;
+      }
       console.error(err);
     }
   };
@@ -47,12 +47,10 @@ export default function HostPasses() {
     if (!newGroupName.trim()) return;
 
     try {
-      const res = await fetch('/api/host/groups', {
+      const data = await api('/api/host/groups', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newGroupName.trim() }),
       });
-      const data = await res.json();
       if (data.group) {
         setGroups([...groups, data.group]);
         setSelectedGroupIds([...selectedGroupIds, data.group.id]);
@@ -68,9 +66,8 @@ export default function HostPasses() {
     if (!newPassName.trim()) return;
 
     try {
-      const res = await fetch('/api/host/passes', {
+      const data = await api('/api/host/passes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newPassName.trim(),
           role: newPassRole,
@@ -78,9 +75,6 @@ export default function HostPasses() {
           groupIds: selectedGroupIds,
         }),
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
 
       setIsDrawerOpen(false);
       setNewPassName('');
@@ -101,8 +95,7 @@ export default function HostPasses() {
     }
 
     try {
-      const res = await fetch(`/api/host/passes/${id}/revoke`, { method: 'POST' });
-      if (!res.ok) throw new Error('Revoke failed');
+      await api(`/api/host/passes/${id}/revoke`, { method: 'POST' });
       await fetchPasses();
     } catch (err: any) {
       alert(err.message);
@@ -115,8 +108,7 @@ export default function HostPasses() {
     }
 
     try {
-      const res = await fetch(`/api/host/passes/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed');
+      await api(`/api/host/passes/${id}`, { method: 'DELETE' });
       await fetchPasses();
     } catch (err: any) {
       alert(err.message);
@@ -125,9 +117,8 @@ export default function HostPasses() {
 
   const handleToggleDownload = async (id: string, current: boolean) => {
     try {
-      await fetch(`/api/host/passes/${id}/download`, {
+      await api(`/api/host/passes/${id}/download`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ canDownload: !current }),
       });
       await fetchPasses();

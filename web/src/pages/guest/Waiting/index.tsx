@@ -1,12 +1,13 @@
 import { Hourglass, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../../lib/api';
 
 export default function GuestWaitingPage() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/logout', { method: 'POST' });
+      await api('/api/logout', { method: 'POST' });
     } finally {
       navigate('/');
     }

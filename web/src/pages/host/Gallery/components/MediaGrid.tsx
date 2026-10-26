@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Check, Eye, Trash2, Video, Globe, Users, Lock, Folder, FolderOpen, ChevronDown } from 'lucide-react';
+import { getMediaUrl } from '../../../../lib/api';
 
 export interface HostMediaItem {
   id: string;
@@ -68,7 +69,7 @@ export function MediaGrid({
         <div className="aspect-square relative w-full bg-[#f4efe6] dark:bg-[#161412] overflow-hidden">
           {item.kind === 'photo' ? (
             <img
-              src={item.thumbPath || item.path}
+              src={getMediaUrl(item.thumbPath || item.path)}
               alt={`Photo by ${item.uploaderName}`}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
@@ -77,14 +78,14 @@ export function MediaGrid({
             <div className="w-full h-full flex flex-col items-center justify-center bg-[#161412] text-white relative">
               {item.thumbPath && !item.thumbPath.endsWith('.mp4') && !item.thumbPath.endsWith('.webm') && !item.thumbPath.endsWith('.mov') ? (
                 <img
-                  src={item.thumbPath}
+                  src={getMediaUrl(item.thumbPath)}
                   alt={`Video by ${item.uploaderName}`}
                   className="w-full h-full object-cover opacity-85"
                   loading="lazy"
                 />
               ) : (
                 <video
-                  src={item.path}
+                  src={getMediaUrl(item.path)}
                   className="w-full h-full object-cover opacity-80"
                   muted
                   preload="metadata"

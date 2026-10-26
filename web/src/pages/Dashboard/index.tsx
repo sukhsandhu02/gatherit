@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { LogoMark } from '../../components/Logo';
 import { SystemCards } from './components/SystemCards';
 import { ThemeToggle } from '../../components/ThemeToggle';
+import { api, getWsUrl } from '../../lib/api';
 
 export default function Dashboard() {
   const [health, setHealth] = useState<{ status: string; db: string } | null>(null);
@@ -9,14 +10,11 @@ export default function Dashboard() {
   const [echoMessage, setEchoMessage] = useState<string>('');
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((res) => res.json())
+    api('/api/health')
       .then((data) => setHealth(data))
       .catch(() => setHealth({ status: 'error', db: 'unreachable' }));
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    const socket = new WebSocket(wsUrl);
+    const socket = new WebSocket(getWsUrl('/ws'));
 
     socket.onopen = () => {
       setWsStatus('connected');

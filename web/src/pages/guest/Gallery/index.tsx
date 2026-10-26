@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
-import { api } from '../../../lib/api';
+import { api, getMediaUrl } from '../../../lib/api';
 import { Archive, Video, Image as ImageIcon, Folder, FolderOpen, LayoutGrid, ChevronDown, Trash2, Radio } from 'lucide-react';
 import { useMesh } from '../../../lib/p2p/MeshContext';
 import { MeshStatusBadge } from '../../../components/p2p/MeshStatusBadge';
@@ -120,7 +120,7 @@ export default function GuestGalleryPage() {
       >
         {item.kind === 'photo' ? (
           <img
-            src={`/api/media/${item.id}/thumb`}
+            src={getMediaUrl(`/api/media/${item.id}/thumb`)}
             alt="Thumbnail"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
@@ -128,7 +128,7 @@ export default function GuestGalleryPage() {
               const target = e.currentTarget;
               if (!target.dataset.triedFallback) {
                 target.dataset.triedFallback = 'true';
-                target.src = `/api/media/${item.id}`;
+                target.src = getMediaUrl(`/api/media/${item.id}`);
               }
             }}
           />
@@ -136,14 +136,14 @@ export default function GuestGalleryPage() {
           <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-white relative">
             {item.thumbPath && !item.thumbPath.endsWith('.mp4') && !item.thumbPath.endsWith('.webm') && !item.thumbPath.endsWith('.mov') ? (
               <img
-                src={`/api/media/${item.id}/thumb`}
+                src={getMediaUrl(`/api/media/${item.id}/thumb`)}
                 alt="Thumbnail"
                 className="w-full h-full object-cover opacity-85"
                 loading="lazy"
               />
             ) : (
               <video
-                src={`/api/media/${item.id}`}
+                src={getMediaUrl(`/api/media/${item.id}`)}
                 className="w-full h-full object-cover opacity-75 pointer-events-none"
                 muted
                 playsInline

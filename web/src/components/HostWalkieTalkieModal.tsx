@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Radio, Mic, Lock, Unlock, X, Bell, Users, AlertTriangle } from 'lucide-react';
 import { PABroadcaster } from '../lib/audio/paBroadcaster';
+import { getWsUrl } from '../lib/api';
 
 interface HostWalkieTalkieModalProps {
   isOpen: boolean;
@@ -29,9 +30,7 @@ export function HostWalkieTalkieModal({ isOpen, onClose, eventName }: HostWalkie
       return;
     }
 
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${window.location.host}/ws`;
-    const socket = new WebSocket(wsUrl);
+    const socket = new WebSocket(getWsUrl('/ws'));
     wsRef.current = socket;
 
     socket.onopen = () => {

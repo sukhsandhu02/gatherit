@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, X, Check } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, getWsUrl } from '../lib/api';
 import { PABroadcaster } from '../lib/audio/paBroadcaster';
 
 interface FellowGuest {
@@ -62,8 +62,7 @@ export function GuestTalkButton() {
       })
       .catch(() => {});
 
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const socket = new WebSocket(`${proto}//${window.location.host}/ws`);
+    const socket = new WebSocket(getWsUrl('/ws'));
     wsRef.current = socket;
 
     socket.onopen = () => socket.send(JSON.stringify({ type: 'pa_status' }));

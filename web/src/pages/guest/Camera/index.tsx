@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
-import { api } from '../../../lib/api';
+import { api, getApiUrl } from '../../../lib/api';
 import {
   RefreshCw,
   CheckCircle2,
@@ -651,9 +651,10 @@ export default function GuestCameraPage() {
         const formData = new FormData();
         formData.append('file', compressedBlob, 'photo.jpg');
 
-        const res = await fetch('/api/upload/photo', {
+        const res = await fetch(getApiUrl('/api/upload/photo'), {
           method: 'POST',
           body: formData,
+          credentials: 'include',
         });
 
         if (res.ok) {
@@ -700,18 +701,20 @@ export default function GuestCameraPage() {
         const formData = new FormData();
         formData.append('file', videoBlob, `video.${ext}`);
 
-        const res = await fetch('/api/upload/video', {
+        const res = await fetch(getApiUrl('/api/upload/video'), {
           method: 'POST',
           body: formData,
+          credentials: 'include',
         });
 
         if (res.ok) {
           showToast('Video uploaded to host server!');
         } else {
           // Fallback to /api/upload/photo if needed
-          const fbRes = await fetch('/api/upload/photo', {
+          const fbRes = await fetch(getApiUrl('/api/upload/photo'), {
             method: 'POST',
             body: formData,
+            credentials: 'include',
           });
           if (fbRes.ok) {
             showToast('Video uploaded to host server!');

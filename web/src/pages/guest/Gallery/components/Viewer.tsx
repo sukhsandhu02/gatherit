@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Trash2, Share2, CheckCircle2 } from 'lucide-react';
-import { api } from '../../../../lib/api';
+import { api, getApiUrl, getMediaUrl } from '../../../../lib/api';
 
 export default function GuestViewerPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,7 +19,7 @@ export default function GuestViewerPage() {
 
   const handleDownload = () => {
     if (!id) return;
-    window.location.href = `/api/media/${id}?download=1`;
+    window.location.href = getApiUrl(`/api/media/${id}?download=1`);
   };
 
   const handleShare = async () => {
@@ -125,7 +125,7 @@ export default function GuestViewerPage() {
         <div className="max-w-full max-h-[80vh] flex items-center justify-center">
           {!isVideo ? (
             <img
-              src={`/api/media/${id}`}
+              src={getMediaUrl(`/api/media/${id}`)}
               alt="Viewing memory"
               className="max-h-[80vh] max-w-full object-contain rounded-xl shadow-2xl"
               onError={() => setIsVideo(true)}
@@ -133,7 +133,7 @@ export default function GuestViewerPage() {
           ) : (
             <video
               id="viewer-video"
-              src={`/api/media/${id}`}
+              src={getMediaUrl(`/api/media/${id}`)}
               controls
               playsInline
               autoPlay

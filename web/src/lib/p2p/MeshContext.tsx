@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { MeshPeer } from './mesh';
 import { getAllLocalPhotos, type OfflinePhoto, getPeerCatalog } from '../offlineStorage';
+import { getWsUrl } from '../api';
 
 export interface PeerLocation {
   peerId: string;
@@ -114,9 +115,7 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const connectLAN = () => {
       try {
-        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${proto}//${window.location.host}/ws`;
-        ws = new WebSocket(wsUrl);
+        ws = new WebSocket(getWsUrl('/ws'));
         wsRef.current = ws;
 
         ws.onopen = () => {

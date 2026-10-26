@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { HeartHandshake, AlertCircle } from 'lucide-react';
 import { SetupForm } from './components/SetupForm';
 import { ThemeToggle } from '../../components/ThemeToggle';
+import { api } from '../../lib/api';
 
 export default function HostSetup() {
   const navigate = useNavigate();
@@ -17,8 +18,7 @@ export default function HostSetup() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/host/status')
-      .then((res) => res.json())
+    api('/api/host/status')
       .then((data) => {
         setHasEvent(data.hasEvent);
         if (data.events && data.events.length > 0) {
@@ -43,16 +43,10 @@ export default function HostSetup() {
         ? { password, eventId: selectedEventId || undefined }
         : { name, date, password };
 
-      const res = await fetch(endpoint, {
+      const data = await api(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to authenticate');
-      }
 
       navigate('/host/event');
     } catch (err: any) {
