@@ -10,6 +10,7 @@
     "dev:web": "npm --prefix web run dev",
     "build:server": "npm --prefix server run build",
     "build:web": "npm --prefix web run build",
+    "test": "npm --prefix server test",
     "db:push": "npm --prefix server run db:push",
     "db:generate": "npm --prefix server run db:generate"
   },

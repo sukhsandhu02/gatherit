@@ -13,6 +13,10 @@ import { HindsightClient } from '@vectorize-io/hindsight-client';
 // Lazily initialised singleton — avoids crashing on import when keys are absent.
 let _client: HindsightClient | null = null;
 
+export function setClientForTesting(client: HindsightClient | null): void {
+  _client = client;
+}
+
 function getClient(): HindsightClient | null {
   if (_client) return _client;
   const apiKey = process.env.HINDSIGHT_API_KEY;
