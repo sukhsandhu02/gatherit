@@ -1,3 +1,4 @@
+import fastifyCors from '@fastify/cors';
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyJwt from '@fastify/jwt';
@@ -55,7 +56,11 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, bo
     done(err, undefined);
   }
 });
-
+await fastify.register(fastifyCors, {
+  origin: ['https://gatherit.onrender.com'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+});
 // Register Plugins
 await fastify.register(fastifyCookie, {
   secret: JWT_SECRET,
