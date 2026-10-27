@@ -21,11 +21,27 @@ export class PAPlayer {
       this.volumeNode = this.audioCtx.createGain();
       this.volumeNode.gain.value = 1.0;
       this.volumeNode.connect(this.audioCtx.destination);
+      this.unlockOnUserGesture(this.audioCtx);
     }
     if (this.audioCtx.state === 'suspended') {
       this.audioCtx.resume().catch(() => {});
     }
     return this.audioCtx;
+  }
+
+  private unlockOnUserGesture(ctx: AudioContext): void {
+    if (typeof window === 'undefined') return;
+    const unlock = () => {
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('touchend', unlock, true);
+      window.removeEventListener('click', unlock, true);
+    };
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('touchend', unlock, true);
+    window.addEventListener('click', unlock, true);
   }
 
   async resume(): Promise<void> {

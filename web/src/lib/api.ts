@@ -43,20 +43,62 @@ export function setHostToken(token: string | null): void {
 export function getApiUrl(endpoint: string): string {
   if (!endpoint) return '';
   if (endpoint.startsWith('http://') || endpoint.startsWith('https://')) {
+    if (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      endpoint.startsWith('http://') &&
+      !endpoint.includes('localhost') &&
+      !endpoint.includes('127.0.0.1')
+    ) {
+      return endpoint.replace(/^http:/, 'https:');
+    }
     return endpoint;
   }
   const clean = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  return API_BASE ? `${API_BASE}${clean}` : clean;
+  let base = API_BASE;
+  if (
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:' &&
+    base.startsWith('http://') &&
+    !base.includes('localhost') &&
+    !base.includes('127.0.0.1')
+  ) {
+    base = base.replace(/^http:/, 'https:');
+  }
+  return base ? `${base}${clean}` : clean;
 }
 
 export function getWsUrl(path: string = '/ws'): string {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   let base: string;
   if (API_BASE) {
-    base = API_BASE.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+    let raw = API_BASE;
+    if (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      raw.startsWith('http://') &&
+      !raw.includes('localhost') &&
+      !raw.includes('127.0.0.1')
+    ) {
+      raw = raw.replace(/^http:/, 'https:');
+    }
+    base = raw.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
   } else {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    base = `${proto}//${window.location.host}`;
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const proto = isHttps ? 'wss:' : 'ws:';
+    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:8080';
+    base = `${proto}//${host}`;
+  }
+
+  // Enforce wss if running on https page (prevents mixed-content block on iOS)
+  if (
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:' &&
+    base.startsWith('ws://') &&
+    !base.includes('localhost') &&
+    !base.includes('127.0.0.1')
+  ) {
+    base = base.replace(/^ws:/, 'wss:');
   }
 
   const token = getGuestToken() || getHostToken();
@@ -70,10 +112,46 @@ export function getWsUrl(path: string = '/ws'): string {
 export function getMediaUrl(path: string | null | undefined): string {
   if (!path) return '';
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:') || path.startsWith('data:')) {
+    if (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      path.startsWith('http://') &&
+      !path.includes('localhost') &&
+      !path.includes('127.0.0.1')
+    ) {
+      return path.replace(/^http:/, 'https:');
+    }
     return path;
   }
   const clean = path.startsWith('/') ? path : `/${path}`;
-  return API_BASE ? `${API_BASE}${clean}` : clean;
+  let base = API_BASE;
+  if (
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'https:' &&
+    base.startsWith('http://') &&
+    !base.includes('localhost') &&
+    !base.includes('127.0.0.1')
+  ) {
+    base = base.replace(/^http:/, 'https:');
+  }
+  return base ? `${base}${clean}` : clean;
+}
+
+let cachedIceServers: RTCIceServer[] | null = null;
+export async function getIceServers(): Promise<RTCIceServer[]> {
+  if (cachedIceServers) return cachedIceServers;
+  try {
+    const res = await api('/api/ice-servers');
+    if (res?.iceServers && Array.isArray(res.iceServers)) {
+      cachedIceServers = res.iceServers;
+      return cachedIceServers;
+    }
+  } catch {
+    // fallback
+  }
+  return [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+  ];
 }
 
 export async function api<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {

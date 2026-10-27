@@ -42,14 +42,18 @@ export class MeshPeer {
   constructor(
     isInitiator: boolean,
     localId: string,
-    onIceCandidate: (candidate: RTCIceCandidate) => void
+    onIceCandidate: (candidate: RTCIceCandidate) => void,
+    iceServers: RTCIceServer[] = [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    ]
   ) {
     this.isInitiator = isInitiator;
     this.localId = localId;
     this.onIceCandidateCallback = onIceCandidate;
-    // Offline-friendly WebRTC: empty iceServers allows pure LAN/Host candidate negotiation without waiting for internet STUN
     this.pc = new RTCPeerConnection({
-      iceServers: []
+      iceServers: iceServers && iceServers.length > 0 ? iceServers : [
+        { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+      ],
     });
 
     this.pc.onicecandidate = (e) => {

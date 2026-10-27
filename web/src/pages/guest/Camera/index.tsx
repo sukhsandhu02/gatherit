@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
 import { api, getApiUrl, getWsUrl, getGuestToken } from '../../../lib/api';
 import {
+  savePhotoLocally,
+  enqueueUpload,
+  processUploadQueue,
+} from '../../../lib/offlineStorage';
+import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
@@ -17,6 +22,10 @@ import {
   Check,
   Search,
   Shield,
+  Play,
+  Lock,
+  ExternalLink,
+  Camera as CameraIcon,
 } from 'lucide-react';
 import { useMesh } from '../../../lib/p2p/MeshContext';
 
@@ -25,6 +34,7 @@ interface CameraErrorDetails {
   message: string;
   isPermissionDenied?: boolean;
   isInAppBrowser?: boolean;
+  isInsecureContext?: boolean;
   isUnsupported?: boolean;
 }
 
@@ -39,17 +49,18 @@ function checkCameraSupport(): { supported: boolean; details?: CameraErrorDetail
     return { supported: false, details: { name: 'NotSupportedError', message: 'Window is undefined' } };
   }
 
-  if (
-    window.isSecureContext === false &&
-    window.location.protocol !== 'https:' &&
-    window.location.hostname !== 'localhost' &&
-    window.location.hostname !== '127.0.0.1'
-  ) {
+  const isLocal =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname.endsWith('.local');
+
+  if (window.isSecureContext === false || (window.location.protocol !== 'https:' && !isLocal)) {
     return {
       supported: false,
       details: {
         name: 'InsecureContextError',
-        message: 'Camera access requires a secure HTTPS connection. Please access GatherIt via HTTPS.',
+        message: 'Mobile browsers require a secure HTTPS connection to access the camera.',
+        isInsecureContext: true,
         isUnsupported: true,
       },
     };
@@ -61,7 +72,7 @@ function checkCameraSupport(): { supported: boolean; details?: CameraErrorDetail
       details: {
         name: 'InAppBrowserError',
         message:
-          'In-app browsers (Instagram, WhatsApp, TikTok, etc.) block camera access. Please open this link in Safari or Chrome.',
+          'In-app browsers (Instagram, WhatsApp, TikTok, QR scanner webviews, etc.) block camera hardware access.',
         isInAppBrowser: true,
       },
     };
@@ -106,6 +117,12 @@ export default function GuestCameraPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [cameraError, setCameraError] = useState<CameraErrorDetails | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [needsUserTap, setNeedsUserTap] = useState(false);
+  const [shutterFlash, setShutterFlash] = useState(false);
+
+  const audioTrackRef = useRef<MediaStreamTrack | null>(null);
+  const isMountedRef = useRef(true);
 
   const { broadcastLocation } = useMesh();
   const guestNameRef = useRef<string | undefined>(undefined);
@@ -165,10 +182,12 @@ export default function GuestCameraPage() {
   useEffect(() => {
     let socket: WebSocket | null = null;
     let reconnectTimer: any = null;
+    let pingTimer: any = null;
     let isMounted = true;
 
     const connect = () => {
       if (!isMounted) return;
+      if (pingTimer) clearInterval(pingTimer);
       socket = new WebSocket(getWsUrl('/ws'));
       socket.binaryType = 'arraybuffer';
       wsRef.current = socket;
@@ -183,9 +202,17 @@ export default function GuestCameraPage() {
           allowedGuestIds: [],
           guestName: guestNameRef.current || 'Guest',
         }));
+
+        // Keepalive heartbeat every 25s prevents Render proxy timeouts
+        pingTimer = setInterval(() => {
+          if (socket?.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 25000);
       };
 
       socket.onclose = () => {
+        if (pingTimer) clearInterval(pingTimer);
         if (!isMounted) return;
         setWsConnected(false);
         // Automatically reconnect after 1.5 seconds if hotspot or network interface switched
@@ -193,6 +220,7 @@ export default function GuestCameraPage() {
       };
 
       socket.onerror = () => {
+        if (pingTimer) clearInterval(pingTimer);
         socket?.close();
       };
 
@@ -212,6 +240,7 @@ export default function GuestCameraPage() {
 
     return () => {
       isMounted = false;
+      if (pingTimer) clearInterval(pingTimer);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       socket?.close();
     };
@@ -297,6 +326,12 @@ export default function GuestCameraPage() {
 
   // Helper to cleanly terminate any existing camera streams and wait for OS driver release
   const stopCurrentStream = async () => {
+    if (audioTrackRef.current) {
+      try {
+        audioTrackRef.current.stop();
+        audioTrackRef.current = null;
+      } catch {}
+    }
     if (streamRef.current) {
       try {
         const tracks = streamRef.current.getTracks();
@@ -312,6 +347,7 @@ export default function GuestCameraPage() {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setIsPlaying(false);
     // Give mobile OS camera server/driver 150ms to cleanly release sensor lock
     await new Promise((r) => setTimeout(r, 150));
   };
@@ -333,7 +369,7 @@ export default function GuestCameraPage() {
 
       await stopCurrentStream();
 
-      // 2. Soft constraints: { ideal: facingMode }, audio: false
+      // 2. Soft constraints: { ideal: facingMode }, audio: false (video preview only)
       const targetFacing = facingMode || 'environment';
       let stream: MediaStream | null = null;
 
@@ -341,8 +377,8 @@ export default function GuestCameraPage() {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: targetFacing },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
           },
           audio: false,
         });
@@ -362,8 +398,8 @@ export default function GuestCameraPage() {
             });
           }
         } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
-          // Hardware sensor temporarily busy (switching), pause 200ms and retry
-          await new Promise((r) => setTimeout(r, 200));
+          // Hardware sensor temporarily busy (switching), pause 250ms and retry
+          await new Promise((r) => setTimeout(r, 250));
           try {
             stream = await navigator.mediaDevices.getUserMedia({
               video: { facingMode: { ideal: targetFacing } },
@@ -403,8 +439,13 @@ export default function GuestCameraPage() {
         videoRef.current.muted = true;
         try {
           await videoRef.current.play();
+          setIsPlaying(true);
+          setNeedsUserTap(false);
         } catch (playErr) {
-          console.warn('video.play() failed on start:', playErr);
+          console.warn('video.play() autoplay blocked on iOS:', playErr);
+          // On iOS, autoplay without prior user touch rejects. Show the tap-to-start overlay.
+          setIsPlaying(false);
+          setNeedsUserTap(true);
         }
       }
 
@@ -438,14 +479,30 @@ export default function GuestCameraPage() {
     }
   }, [facingMode]);
 
+  // Handle direct tap from user to start/resume video playback (iOS gesture policy)
+  const handleUserTapToPlay = async () => {
+    if (videoRef.current) {
+      try {
+        await videoRef.current.play();
+        setIsPlaying(true);
+        setNeedsUserTap(false);
+      } catch (err) {
+        console.warn('User tap play failed, requesting camera restart:', err);
+        startCamera();
+      }
+    } else {
+      startCamera();
+    }
+  };
+
   useEffect(() => {
+    isMountedRef.current = true;
     startCamera();
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
+      isMountedRef.current = false;
+      stopCurrentStream();
     };
-  }, [startCamera]);
+  }, [facingMode]);
 
   // Live camera stream encoder: ~10fps @ 800px (16fps @ 1280px boosted)
   // Perfectly calibrated for fluid real-time transmission without mobile lag or thermal throttling
@@ -643,46 +700,28 @@ export default function GuestCameraPage() {
 
   // Upload photo in background without freezing the camera or shutter button
   const uploadPhotoInBackground = async (rawBlob: Blob | File) => {
-    // If incoming file is a video, route directly to video handler
     if (rawBlob.type && rawBlob.type.startsWith('video/')) {
       return uploadVideoBlob(rawBlob, rawBlob.type);
     }
 
     setBgUploadCount((c) => c + 1);
     try {
+      // 1. Immediately save to IndexedDB local offline storage
       try {
-        const { savePhotoLocally } = await import('../../../lib/offlineStorage');
         const hash = await savePhotoLocally(rawBlob);
-        // Broadcast over P2P mesh
-        try {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'catalog_update', hash }));
-          }
-        } catch {
-          // ignore mesh broadcast failure
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'catalog_update', hash }));
         }
       } catch (err) {
         console.warn('Failed to save offline:', err);
       }
-      showToast('Photo captured & saved to local mesh!');
+      showToast('Photo captured & saved locally!');
 
+      // 2. Queue for background upload to server with auto-retry
       try {
-        const compressedBlob = await compressImage(rawBlob);
-        const formData = new FormData();
-        formData.append('file', compressedBlob, 'photo.jpg');
-
-        const res = await fetch(getApiUrl('/api/upload/photo'), {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-        });
-
-        if (res.ok) {
-          showToast('Photo uploaded to host server!');
-        }
-      } catch {
-        // Expected when disconnected/offline. Photo is already saved safely in IndexedDB and mesh
-        console.log('Operating in pure offline mode. Photo stored locally in P2P mesh.');
+        await enqueueUpload(rawBlob, 'photo', `photo_${Date.now()}.jpg`, 'image/jpeg');
+      } catch (qErr) {
+        console.warn('Failed to queue upload:', qErr);
       }
     } catch (err: any) {
       console.error('Background upload error:', err);
@@ -691,58 +730,28 @@ export default function GuestCameraPage() {
     }
   };
 
-  // Upload video blob in background with offline storage backup
+  // Upload video blob in background with offline storage backup and reliable retry queue
   const uploadVideoBlob = async (videoBlob: Blob | File, mimeType?: string) => {
     setBgUploadCount((c) => c + 1);
     try {
       // 1. Save offline in local IndexedDB
       try {
-        const { savePhotoLocally } = await import('../../../lib/offlineStorage');
         const hash = await savePhotoLocally(videoBlob);
-        try {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({ type: 'catalog_update', hash }));
-          }
-        } catch {
-          // ignore mesh broadcast failure
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'catalog_update', hash }));
         }
       } catch (err) {
         console.warn('Failed to save video offline:', err);
       }
       showToast('Video saved locally!');
 
-      // 2. Upload to server
-      try {
-        const detectedMime = mimeType || videoBlob.type || 'video/mp4';
-        let ext = 'mp4';
-        if (detectedMime.includes('webm')) ext = 'webm';
-        else if (detectedMime.includes('quicktime') || detectedMime.includes('mov')) ext = 'mov';
+      // 2. Queue for background upload to server
+      const detectedMime = mimeType || videoBlob.type || 'video/mp4';
+      let ext = 'mp4';
+      if (detectedMime.includes('webm')) ext = 'webm';
+      else if (detectedMime.includes('quicktime') || detectedMime.includes('mov')) ext = 'mov';
 
-        const formData = new FormData();
-        formData.append('file', videoBlob, `video.${ext}`);
-
-        const res = await fetch(getApiUrl('/api/upload/video'), {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-        });
-
-        if (res.ok) {
-          showToast('Video uploaded to host server!');
-        } else {
-          // Fallback to /api/upload/photo if needed
-          const fbRes = await fetch(getApiUrl('/api/upload/photo'), {
-            method: 'POST',
-            body: formData,
-            credentials: 'include',
-          });
-          if (fbRes.ok) {
-            showToast('Video uploaded to host server!');
-          }
-        }
-      } catch {
-        console.log('Operating in pure offline mode. Video stored locally in P2P mesh.');
-      }
+      await enqueueUpload(videoBlob, 'video', `video_${Date.now()}.${ext}`, detectedMime);
     } catch (err: any) {
       console.error('Background video upload error:', err);
       showToast(err.message || 'Failed to save video');
@@ -751,34 +760,31 @@ export default function GuestCameraPage() {
     }
   };
 
-  // Capture Photo with native phone hardware processing or high-res frame
+  // Capture Photo with downscaling to max 2048px, JPEG 0.85, shutter flash and vibration
   const takePhoto = async () => {
     if (!videoRef.current) return;
 
     try {
-      // 1. Try ImageCapture API (Chromium/Android) when not mirrored which grabs raw sensor resolution and ISP processing
-      const videoTrack = streamRef.current?.getVideoTracks()[0];
-      if (!isMirrored && videoTrack && (window as any).ImageCapture) {
-        try {
-          const imageCapture = new (window as any).ImageCapture(videoTrack);
-          const blob = await imageCapture.takePhoto();
-          if (blob) {
-            uploadPhotoInBackground(blob);
-            return;
-          }
-        } catch (icErr) {
-          console.warn('ImageCapture fallback to canvas:', icErr);
+      const video = videoRef.current;
+      const rawW = video.videoWidth || 1280;
+      const rawH = video.videoHeight || 720;
+      const maxDim = 2048;
+      let targetW = rawW;
+      let targetH = rawH;
+
+      if (rawW > maxDim || rawH > maxDim) {
+        if (rawW > rawH) {
+          targetH = Math.round((rawH * maxDim) / rawW);
+          targetW = maxDim;
+        } else {
+          targetW = Math.round((rawW * maxDim) / rawH);
+          targetH = maxDim;
         }
       }
 
-      // 2. High-quality Canvas capture fallback (handles mirror/landscape inversion seamlessly)
-      const video = videoRef.current;
       const canvas = document.createElement('canvas');
-      const width = video.videoWidth || 1920;
-      const height = video.videoHeight || 1080;
-
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = targetW;
+      canvas.height = targetH;
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Could not get canvas context');
 
@@ -787,13 +793,24 @@ export default function GuestCameraPage() {
 
       if (isMirrored) {
         ctx.save();
-        ctx.translate(width, 0);
+        ctx.translate(targetW, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(video, 0, 0, width, height);
+        ctx.drawImage(video, 0, 0, targetW, targetH);
         ctx.restore();
       } else {
-        ctx.drawImage(video, 0, 0, width, height);
+        ctx.drawImage(video, 0, 0, targetW, targetH);
       }
+
+      // Shutter visual flash effect
+      setShutterFlash(true);
+      setTimeout(() => setShutterFlash(false), 120);
+
+      // Haptic tactile feedback
+      try {
+        if ('vibrate' in navigator) {
+          navigator.vibrate(45);
+        }
+      } catch {}
 
       canvas.toBlob(
         (blob) => {
@@ -802,27 +819,39 @@ export default function GuestCameraPage() {
           }
         },
         'image/jpeg',
-        0.92
+        0.85
       );
     } catch (err: any) {
       showToast(err.message || 'Capture error');
     }
   };
 
-  // Video Recording Controls
-  const startRecording = () => {
+  // Video Recording Controls (with audio on recording, max 120s limit, 2.5 Mbps bitrate)
+  const startRecording = async () => {
     if (!streamRef.current || isRecording) return;
 
     try {
-      const stream = streamRef.current;
       recordedChunksRef.current = [];
+      const stream = streamRef.current;
+
+      // Acquire mic audio track only when user records video
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioTrack = audioStream.getAudioTracks()[0];
+        if (audioTrack) {
+          audioTrackRef.current = audioTrack;
+          stream.addTrack(audioTrack);
+        }
+      } catch (micErr) {
+        console.warn('Microphone access denied or unavailable, recording video without sound:', micErr);
+      }
 
       let mimeType = '';
       const supportedTypes = [
-        'video/mp4;codecs=avc1',
+        'video/mp4;codecs=avc1,mp4a.40.2',
         'video/mp4',
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
         'video/webm',
       ];
       for (const t of supportedTypes) {
@@ -832,10 +861,14 @@ export default function GuestCameraPage() {
         }
       }
 
-      const mediaRecorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+      const options: MediaRecorderOptions = {
+        videoBitsPerSecond: 2_500_000, // 2.5 Mbps bitrate limit
+      };
+      if (mimeType) {
+        options.mimeType = mimeType;
+      }
 
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (e) => {
@@ -844,7 +877,7 @@ export default function GuestCameraPage() {
         }
       };
 
-      mediaRecorder.start(1000); // 1-second chunks for continuous buffer population
+      mediaRecorder.start(1000); // 1-second chunks
       setIsRecording(true);
       setRecordDuration(0);
     } catch (err: any) {
@@ -859,11 +892,20 @@ export default function GuestCameraPage() {
     setIsRecording(false);
     setUploading(true);
 
+    // Release temporary mic track so microphone icon in status bar turns off
+    if (audioTrackRef.current) {
+      try {
+        audioTrackRef.current.stop();
+        streamRef.current?.removeTrack(audioTrackRef.current);
+      } catch {}
+      audioTrackRef.current = null;
+    }
+
     mediaRecorder.onstop = async () => {
       try {
         const chunks = recordedChunksRef.current;
         if (chunks.length > 0) {
-          const mime = mediaRecorder.mimeType || 'video/webm';
+          const mime = mediaRecorder.mimeType || 'video/mp4';
           const videoBlob = new Blob(chunks, { type: mime });
           await uploadVideoBlob(videoBlob, mime);
         } else {
@@ -884,12 +926,18 @@ export default function GuestCameraPage() {
     }
   };
 
-  // Recording timer
+  // Recording timer with 120s max limit
   useEffect(() => {
     let interval: any;
     if (isRecording) {
       interval = setInterval(() => {
-        setRecordDuration((prev) => prev + 1);
+        setRecordDuration((prev) => {
+          if (prev >= 119) {
+            stopRecording();
+            return 120;
+          }
+          return prev + 1;
+        });
       }, 1000);
     }
     return () => clearInterval(interval);
@@ -910,16 +958,52 @@ export default function GuestCameraPage() {
         {/* Hidden preview canvas for WebSockets */}
         <canvas ref={canvasRef} className="hidden" />
 
+        {/* Shutter White Flash Feedback */}
+        {shutterFlash && (
+          <div className="absolute inset-0 z-40 bg-white pointer-events-none animate-in fade-in duration-75" />
+        )}
+
         {/* Viewfinder Video */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
+          onPlaying={() => {
+            setIsPlaying(true);
+            setNeedsUserTap(false);
+          }}
+          onLoadedMetadata={async () => {
+            if (videoRef.current) {
+              try {
+                await videoRef.current.play();
+                setIsPlaying(true);
+                setNeedsUserTap(false);
+              } catch {
+                setNeedsUserTap(true);
+              }
+            }
+          }}
           className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 ${
             isMirrored ? '-scale-x-100' : ''
           }`}
         />
+
+        {/* iOS User Tap to Start Camera Overlay (Required when autoplay is blocked by WebKit) */}
+        {needsUserTap && !isPlaying && !cameraError && (
+          <div
+            onClick={handleUserTapToPlay}
+            className="absolute inset-0 z-25 bg-black/70 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center cursor-pointer select-none"
+          >
+            <div className="w-16 h-16 rounded-full bg-white/20 border-2 border-white flex items-center justify-center text-white mb-3 shadow-lg animate-pulse">
+              <Play className="w-8 h-8 fill-white translate-x-0.5" />
+            </div>
+            <p className="text-white font-bold text-base tracking-wide">Tap to start camera</p>
+            <p className="text-slate-300 text-xs mt-1 max-w-xs">
+              Tap anywhere on screen to enable camera preview on iPhone
+            </p>
+          </div>
+        )}
 
         {/* Animated Tap to Focus Ring */}
         {focusRing && (
@@ -1031,7 +1115,9 @@ export default function GuestCameraPage() {
           <div className="absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
             <AlertCircle className="w-12 h-12 text-rose-500 mb-3 shrink-0" />
             <h3 className="font-bold text-white text-base mb-1">
-              {cameraError.isPermissionDenied
+              {cameraError.isInsecureContext
+                ? 'Insecure Connection (HTTP)'
+                : cameraError.isPermissionDenied
                 ? 'Camera Permission Blocked'
                 : cameraError.isInAppBrowser
                 ? 'In-App Browser Detected'
@@ -1043,7 +1129,24 @@ export default function GuestCameraPage() {
               <span className="font-semibold">{cameraError.name}:</span> {cameraError.message}
             </div>
 
-            {cameraError.isPermissionDenied ? (
+            {cameraError.isInsecureContext ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 my-2 max-w-xs text-left text-xs space-y-2 text-slate-300">
+                <p className="font-semibold text-white">HTTPS is required for cameras:</p>
+                <p className="text-slate-400">
+                  Mobile browsers (iPhone Chrome & Safari) block camera access on unencrypted connections. Switch to HTTPS to continue.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.replace(window.location.href.replace(/^http:/, 'https:'));
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md cursor-pointer transition active:scale-95"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Switch to Secure HTTPS</span>
+                </button>
+              </div>
+            ) : cameraError.isPermissionDenied ? (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 my-2 max-w-xs text-left text-xs space-y-2 text-slate-300">
                 <p className="font-semibold text-white">How to unblock in 2 taps:</p>
                 <ol className="list-decimal list-inside space-y-1 text-slate-400">

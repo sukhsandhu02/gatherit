@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { MeshPeer } from './mesh';
 import { getAllLocalPhotos, type OfflinePhoto, getPeerCatalog } from '../offlineStorage';
-import { getWsUrl } from '../api';
+import { getWsUrl, getIceServers } from '../api';
 
 export interface PeerLocation {
   peerId: string;
@@ -56,6 +56,7 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isMeshModalOpen, setIsMeshModalOpen] = useState(false);
   const peersRef = useRef<Record<string, MeshPeer>>({});
   const peerLocationsRef = useRef<Record<string, PeerLocation>>({});
+  const iceServersRef = useRef<RTCIceServer[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const myLastLocationRef = useRef<{ lat: number; lng: number; accuracy?: number; name?: string; role?: 'host' | 'guest' } | null>(null);
   const localIdRef = useRef<string>(
@@ -76,6 +77,11 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshPhotos();
+    getIceServers()
+      .then((servers) => {
+        iceServersRef.current = servers;
+      })
+      .catch(() => {});
   }, []);
 
   const attachPeerListeners = (peer: MeshPeer, peerId: string) => {
@@ -112,9 +118,11 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimeout: any = null;
+    let pingInterval: any = null;
 
     const connectLAN = () => {
       try {
+        if (pingInterval) clearInterval(pingInterval);
         ws = new WebSocket(getWsUrl('/ws'));
         wsRef.current = ws;
 
@@ -132,6 +140,12 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
               accuracy: myLastLocationRef.current.accuracy,
             }));
           }
+          // Heartbeat keepalive every 25s to prevent Render proxy timeouts
+          pingInterval = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'ping' }));
+            }
+          }, 25000);
         };
 
         ws.onmessage = async (e) => {
@@ -145,13 +159,18 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const connectToPeer = async (remotePeerId: string) => {
               if (peersRef.current[remotePeerId] || remotePeerId === localId) return;
-              const peer = new MeshPeer(true, localId, (candidate) => {
-                ws?.send(JSON.stringify({
-                  type: 'signal',
-                  target: remotePeerId,
-                  signal: { type: 'candidate', candidate }
-                }));
-              });
+              const peer = new MeshPeer(
+                true,
+                localId,
+                (candidate) => {
+                  ws?.send(JSON.stringify({
+                    type: 'signal',
+                    target: remotePeerId,
+                    signal: { type: 'candidate', candidate }
+                  }));
+                },
+                iceServersRef.current
+              );
               attachPeerListeners(peer, remotePeerId);
               peersRef.current[remotePeerId] = peer;
 
@@ -178,13 +197,18 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
               let peer = peersRef.current[src];
               if (!peer && msg.signal.type === 'offer') {
-                peer = new MeshPeer(false, localId, (candidate) => {
-                  ws?.send(JSON.stringify({
-                    type: 'signal',
-                    target: src,
-                    signal: { type: 'candidate', candidate }
-                  }));
-                });
+                peer = new MeshPeer(
+                  false,
+                  localId,
+                  (candidate) => {
+                    ws?.send(JSON.stringify({
+                      type: 'signal',
+                      target: src,
+                      signal: { type: 'candidate', candidate }
+                    }));
+                  },
+                  iceServersRef.current
+                );
                 attachPeerListeners(peer, src);
                 peersRef.current[src] = peer;
               }
@@ -237,10 +261,12 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
 
         ws.onclose = () => {
+          if (pingInterval) clearInterval(pingInterval);
           reconnectTimeout = setTimeout(connectLAN, 3000);
         };
 
         ws.onerror = () => {
+          if (pingInterval) clearInterval(pingInterval);
           ws?.close();
         };
       } catch {
@@ -251,6 +277,7 @@ export const MeshProvider: React.FC<{ children: React.ReactNode }> = ({ children
     connectLAN();
 
     return () => {
+      if (pingInterval) clearInterval(pingInterval);
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (ws) ws.close();
     };

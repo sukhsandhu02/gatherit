@@ -17,6 +17,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { MEDIA_DIR, connectedHosts, connectedGuests, guestLiveShareConfigs, broadcastLiveStreamsUpdate } from '../index.js';
 import { retainEventMemory } from '../services/hindsight.js';
+import { uploadToStorage } from '../services/storage.js';
 
 const execAsync = promisify(exec);
 
@@ -772,6 +773,12 @@ export async function guestRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Persist to S3/R2 storage for Render ephemeral disk persistence
+      uploadToStorage(filePath, `media/${guest.id}/${fileId}${ext}`, mime || 'video/mp4').catch(() => {});
+      if (hasThumb && fs.existsSync(thumbPath)) {
+        uploadToStorage(thumbPath, `media/${guest.id}/${fileId}_thumb.jpg`, 'image/jpeg').catch(() => {});
+      }
+
       return newMedia;
     };
 
@@ -854,6 +861,10 @@ export async function guestRoutes(fastify: FastifyInstance) {
         guest.eventId,
         `Guest ${guest.name} uploaded a photo at ${new Date().toISOString()}`,
       ).catch(() => {/* swallowed */});
+
+      // Persist to S3/R2 storage for Render ephemeral disk persistence
+      uploadToStorage(filePath, `media/${guest.id}/${fileId}.jpg`, 'image/jpeg').catch(() => {});
+      uploadToStorage(thumbPath, `media/${guest.id}/${fileId}_thumb.jpg`, 'image/jpeg').catch(() => {});
 
       return { success: true, media: newMedia };
     });

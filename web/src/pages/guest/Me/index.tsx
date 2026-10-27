@@ -1,8 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
-import { api, setGuestToken } from '../../../lib/api';
-import { Phone, KeyRound, LogOut, ShieldCheck, CheckCircle2, Moon, Share2, Trash2, Copy, Plus } from 'lucide-react';
+import { api, setGuestToken, getWsUrl, getIceServers } from '../../../lib/api';
+import {
+  Phone,
+  KeyRound,
+  LogOut,
+  ShieldCheck,
+  CheckCircle2,
+  Moon,
+  Share2,
+  Trash2,
+  Copy,
+  Plus,
+  Activity,
+  Video,
+  Wifi,
+  Lock,
+  AlertTriangle,
+  RefreshCw,
+  Check,
+} from 'lucide-react';
 import { ThemeToggle } from '../../../components/ThemeToggle';
 
 let cachedGuestProfile: any = null;
@@ -21,6 +39,92 @@ export default function GuestMePage() {
   const [loadingShares, setLoadingShares] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [creatingAllShare, setCreatingAllShare] = useState(false);
+
+  // Device & Camera Diagnostics State
+  const [diag, setDiag] = useState<any>({
+    loading: true,
+    isSecure: true,
+    protocol: 'https:',
+    hasMediaDevices: true,
+    cameraPermission: 'prompt',
+    micPermission: 'prompt',
+    supportedMimes: [] as string[],
+    wsState: 'testing',
+    hasTurn: false,
+    isInApp: false,
+  });
+
+  const runDiagnostics = async () => {
+    setDiag((prev: any) => ({ ...prev, loading: true }));
+    const isSecure = typeof window !== 'undefined' ? window.isSecureContext : true;
+    const protocol = typeof window !== 'undefined' ? window.location.protocol : 'https:';
+    const hasMediaDevices = !!navigator?.mediaDevices?.getUserMedia;
+
+    let cameraPermission = 'unknown';
+    let micPermission = 'unknown';
+    try {
+      if (navigator.permissions?.query) {
+        const camRes = await navigator.permissions.query({ name: 'camera' as any });
+        cameraPermission = camRes.state;
+        const micRes = await navigator.permissions.query({ name: 'microphone' as any });
+        micPermission = micRes.state;
+      }
+    } catch {}
+
+    const candidateMimes = [
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+    ];
+    const supportedMimes = candidateMimes.filter(
+      (m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(m)
+    );
+
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+    const isInApp = /FBAN|FBAV|Instagram|WhatsApp|Line|Twitter|Snapchat|MicroMessenger|musical_ly|ByteLocale/i.test(ua);
+
+    let hasTurn = false;
+    try {
+      const servers = await getIceServers();
+      hasTurn = servers.some((s) => {
+        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+        return urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
+      });
+    } catch {}
+
+    let wsState = 'testing';
+    try {
+      const ws = new WebSocket(getWsUrl('/ws'));
+      ws.onopen = () => {
+        setDiag((prev: any) => ({ ...prev, wsState: 'connected' }));
+        ws.close();
+      };
+      ws.onerror = () => {
+        setDiag((prev: any) => ({ ...prev, wsState: 'failed' }));
+      };
+    } catch {
+      wsState = 'failed';
+    }
+
+    setDiag({
+      loading: false,
+      isSecure,
+      protocol,
+      hasMediaDevices,
+      cameraPermission,
+      micPermission,
+      supportedMimes,
+      wsState,
+      hasTurn,
+      isInApp,
+    });
+  };
+
+  useEffect(() => {
+    runDiagnostics();
+  }, []);
 
   const fetchShares = async () => {
     setLoadingShares(true);
@@ -171,6 +275,164 @@ export default function GuestMePage() {
             </div>
           </div>
           <ThemeToggle showLabel />
+        </div>
+
+        {/* Camera & Mobile Diagnostics Card */}
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 shadow-xs mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
+              <Activity className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+              <h3 className="font-serif text-base font-bold text-slate-900 dark:text-white">
+                Camera & Device Diagnostics
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={runDiagnostics}
+              className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition cursor-pointer"
+              title="Refresh diagnostics"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${diag.loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+            Real-time status of mobile camera permissions, WebRTC networking, and secure context.
+          </p>
+
+          <div className="space-y-2 text-xs">
+            {/* Secure Context */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">Connection</span>
+              </div>
+              <span
+                className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold ${
+                  diag.isSecure
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                }`}
+              >
+                {diag.isSecure ? 'Secure (HTTPS)' : 'Insecure (HTTP)'}
+              </span>
+            </div>
+
+            {/* Insecure Context Warning & Switch Button */}
+            {!diag.isSecure && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs space-y-2">
+                <div className="flex items-center space-x-1.5 font-bold">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>Camera blocked by browser</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  iOS Safari and Chrome disable camera access when not using HTTPS.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => window.location.replace(window.location.href.replace(/^http:/, 'https:'))}
+                  className="w-full py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-xs cursor-pointer"
+                >
+                  Switch to HTTPS
+                </button>
+              </div>
+            )}
+
+            {/* In-App Browser Warning */}
+            {diag.isInApp && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs">
+                <span className="font-bold block mb-0.5">In-App Browser Detected</span>
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  Instagram, WhatsApp, and QR webviews block cameras. Open in Safari or Chrome for full camera support.
+                </p>
+              </div>
+            )}
+
+            {/* Camera API Support */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Video className="w-3.5 h-3.5 text-slate-400" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">Camera Feed API</span>
+              </div>
+              <span
+                className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold ${
+                  diag.hasMediaDevices
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                }`}
+              >
+                {diag.hasMediaDevices ? 'Supported' : 'Unavailable'}
+              </span>
+            </div>
+
+            {/* Camera Permission State */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Camera Permission</span>
+              <span
+                className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold ${
+                  diag.cameraPermission === 'granted'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : diag.cameraPermission === 'denied'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                    : 'bg-slate-500/10 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                {diag.cameraPermission}
+              </span>
+            </div>
+
+            {/* Video Recording MIME formats */}
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-slate-700 dark:text-slate-300">Video Recording Codecs</span>
+                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                  {diag.supportedMimes.length > 0 ? `${diag.supportedMimes.length} available` : 'None'}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {diag.supportedMimes.map((mime: string) => (
+                  <span
+                    key={mime}
+                    className="px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-mono border border-slate-200 dark:border-slate-600"
+                  >
+                    {mime.split(';')[0]}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Signaling WebSocket */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Wifi className="w-3.5 h-3.5 text-slate-400" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">Live Signaling (WSS)</span>
+              </div>
+              <span
+                className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold ${
+                  diag.wsState === 'connected'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : diag.wsState === 'failed'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                }`}
+              >
+                {diag.wsState}
+              </span>
+            </div>
+
+            {/* WebRTC TURN Server */}
+            <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+              <span className="font-medium text-slate-700 dark:text-slate-300">Cellular WebRTC (TURN)</span>
+              <span
+                className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold ${
+                  diag.hasTurn
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-slate-500/10 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                {diag.hasTurn ? 'Configured' : 'Default STUN'}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* My Share Links Card */}

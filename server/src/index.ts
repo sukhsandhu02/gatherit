@@ -16,6 +16,7 @@ import * as schema from './db/schema.js';
 import { hostRoutes } from './routes/host.js';
 import { guestRoutes } from './routes/guest.js';
 import { joinPageRoutes } from './routes/join-page.js';
+import { getFromStorage } from './services/storage.js';
 import 'dotenv/config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,22 @@ export const fastify = Fastify({
   },
   disableRequestLogging: false,
   trustProxy: true,
+  bodyLimit: 210 * 1024 * 1024,
+});
+
+// Enforce HTTPS redirect in production behind reverse proxies like Render
+fastify.addHook('onRequest', async (req, reply) => {
+  const proto = req.headers['x-forwarded-proto'];
+  const host = req.headers.host;
+  if (
+    process.env.NODE_ENV === 'production' &&
+    proto === 'http' &&
+    host &&
+    !host.includes('localhost') &&
+    !host.includes('127.0.0.1')
+  ) {
+    return reply.redirect(301, `https://${host}${req.raw.url}`);
+  }
 });
 
 fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
@@ -105,7 +122,7 @@ await fastify.register(fastifyWebsocket);
 
 await fastify.register(fastifyMultipart, {
   limits: {
-    fileSize: 100 * 1024 * 1024,
+    fileSize: 200 * 1024 * 1024,
   },
 });
 
@@ -132,12 +149,44 @@ if (fs.existsSync(WEB_DIST)) {
   });
 }
 
-// Media files static serving
+// Media files static serving with cloud object storage fallback
 await fastify.register(fastifyStatic, {
   root: MEDIA_DIR,
   prefix: '/media-files/',
   decorateReply: false,
 });
+
+// Route handler for media files: streams from S3/R2 if local file was wiped by Render restart
+fastify.get<{ Params: { guestId: string; filename: string } }>(
+  '/media-files/:guestId/:filename',
+  async (req, reply) => {
+    const { guestId, filename } = req.params;
+    const localPath = path.join(MEDIA_DIR, guestId, filename);
+    if (fs.existsSync(localPath)) {
+      const ext = path.extname(filename).toLowerCase();
+      const mime =
+        ext === '.jpg' || ext === '.jpeg'
+          ? 'image/jpeg'
+          : ext === '.mp4'
+          ? 'video/mp4'
+          : ext === '.webm'
+          ? 'video/webm'
+          : 'application/octet-stream';
+      reply.type(mime);
+      return reply.send(fs.createReadStream(localPath));
+    }
+
+    const storageKey = `media/${guestId}/${filename}`;
+    const fromStorage = await getFromStorage(storageKey);
+    if (fromStorage) {
+      if (fromStorage.contentType) reply.type(fromStorage.contentType);
+      if (fromStorage.contentLength) reply.header('content-length', fromStorage.contentLength);
+      return reply.send(fromStorage.stream);
+    }
+
+    return reply.status(404).send({ error: 'Media not found' });
+  }
+);
 
 // Connected WebSocket clients
 export const connectedGuests = new Map<string, Set<any>>(); // guestId -> Set<WebSocket>
@@ -226,6 +275,27 @@ setInterval(() => {
     broadcastLiveStreamsUpdate();
   }
 }, 3000);
+
+// WebRTC STUN/TURN ICE servers endpoint
+fastify.get('/api/ice-servers', async () => {
+  const iceServers: Array<{ urls: string | string[]; username?: string; credential?: string }> = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  ];
+
+  const turnUrl = process.env.TURN_URL || process.env.COTURN_URL;
+  if (turnUrl) {
+    const urls = turnUrl.split(',').map((u) => u.trim());
+    const username = process.env.TURN_USERNAME || process.env.TURN_USER;
+    const credential = process.env.TURN_CREDENTIAL || process.env.TURN_PASSWORD;
+    iceServers.push({
+      urls,
+      ...(username ? { username } : {}),
+      ...(credential ? { credential } : {}),
+    });
+  }
+
+  return { iceServers };
+});
 
 // Health check endpoint
 fastify.get('/api/health', async (_req, reply) => {
