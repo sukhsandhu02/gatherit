@@ -109,6 +109,11 @@ await fastify.register(fastifyMultipart, {
   },
 });
 
+// Ensure Permissions-Policy allows camera, microphone, and geolocation
+fastify.addHook('onSend', async (_req, reply) => {
+  reply.header('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
+});
+
 // Static client & media files
 const WEB_DIST = path.resolve(__dirname, '../../web/dist');
 if (fs.existsSync(WEB_DIST)) {
@@ -117,6 +122,7 @@ if (fs.existsSync(WEB_DIST)) {
     prefix: '/',
     cacheControl: false,
     setHeaders: (res, pathName) => {
+      res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
       if (pathName.includes('/assets/')) {
         res.setHeader('cache-control', 'public, max-age=31536000, immutable');
       } else {
@@ -899,6 +905,7 @@ fastify.get('/ws', { websocket: true }, (socket, req) => {
 
 // SPA fallback for non-API routes
 fastify.setNotFoundHandler(async (req, reply) => {
+  reply.header('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(self)');
   if (req.url.startsWith('/api/') || req.url === '/ws') {
     return reply.status(404).send({ error: 'Endpoint not found' });
   }

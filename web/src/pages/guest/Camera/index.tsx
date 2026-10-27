@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
-import { api, getApiUrl, getWsUrl } from '../../../lib/api';
+import { api, getApiUrl, getWsUrl, getGuestToken } from '../../../lib/api';
 import {
   RefreshCw,
   CheckCircle2,
@@ -19,6 +19,68 @@ import {
   Shield,
 } from 'lucide-react';
 import { useMesh } from '../../../lib/p2p/MeshContext';
+
+interface CameraErrorDetails {
+  name: string;
+  message: string;
+  isPermissionDenied?: boolean;
+  isInAppBrowser?: boolean;
+  isUnsupported?: boolean;
+}
+
+function checkInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || navigator.vendor || (window as any).opera || '';
+  return /FBAN|FBAV|Instagram|WhatsApp|Line|Twitter|Snapchat|MicroMessenger|musical_ly|ByteLocale/i.test(ua);
+}
+
+function checkCameraSupport(): { supported: boolean; details?: CameraErrorDetails } {
+  if (typeof window === 'undefined') {
+    return { supported: false, details: { name: 'NotSupportedError', message: 'Window is undefined' } };
+  }
+
+  if (
+    window.isSecureContext === false &&
+    window.location.protocol !== 'https:' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1'
+  ) {
+    return {
+      supported: false,
+      details: {
+        name: 'InsecureContextError',
+        message: 'Camera access requires a secure HTTPS connection. Please access GatherIt via HTTPS.',
+        isUnsupported: true,
+      },
+    };
+  }
+
+  if (checkInAppBrowser()) {
+    return {
+      supported: false,
+      details: {
+        name: 'InAppBrowserError',
+        message:
+          'In-app browsers (Instagram, WhatsApp, TikTok, etc.) block camera access. Please open this link in Safari or Chrome.',
+        isInAppBrowser: true,
+      },
+    };
+  }
+
+  if (!navigator?.mediaDevices?.getUserMedia) {
+    return {
+      supported: false,
+      details: {
+        name: 'NotSupportedError',
+        message:
+          'Your browser does not support in-browser camera streaming. Please open this link in Safari or Chrome, or use the system camera below.',
+        isUnsupported: true,
+      },
+    };
+  }
+
+  return { supported: true };
+}
 
 export default function GuestCameraPage() {
   const navigate = useNavigate();
@@ -43,7 +105,7 @@ export default function GuestCameraPage() {
   const [bgUploadCount, setBgUploadCount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<CameraErrorDetails | null>(null);
 
   const { broadcastLocation } = useMesh();
   const guestNameRef = useRef<string | undefined>(undefined);
@@ -164,7 +226,9 @@ export default function GuestCameraPage() {
       if (err?.data?.pending) {
         navigate('/waiting', { replace: true });
       } else if (err?.status === 401) {
-        navigate('/?join=1', { replace: true });
+        if (!getGuestToken()) {
+          navigate('/?join=1', { replace: true });
+        }
       }
     });
   }, [navigate]);
@@ -252,138 +316,99 @@ export default function GuestCameraPage() {
     await new Promise((r) => setTimeout(r, 150));
   };
 
-  // Initialize Camera Stream with smart device enumeration & automatic retry on NotReadableError
+  // Initialize Camera Stream with soft constraints and fallback
   const startCamera = useCallback(async () => {
     if (isStartingCameraRef.current) return;
     isStartingCameraRef.current = true;
 
     try {
       setCameraError(null);
-      if (!navigator?.mediaDevices?.getUserMedia) {
-        throw new Error('Your browser does not support in-browser camera streaming. Please use the Upload button below.');
+
+      // 1. Context and in-app browser validation
+      const support = checkCameraSupport();
+      if (!support.supported && support.details) {
+        setCameraError(support.details);
+        return;
       }
 
       await stopCurrentStream();
 
-      // Find specific deviceId for the desired camera if devices are enumerated
-      let targetDeviceId: string | undefined = undefined;
-      try {
-        if (navigator.mediaDevices.enumerateDevices) {
-          const devices = await navigator.mediaDevices.enumerateDevices();
-          const videoDevices = devices.filter((d) => d.kind === 'videoinput');
-          if (videoDevices.length > 1) {
-            const isUserTarget = facingMode === 'user';
-            const matchedDevice = videoDevices.find((d) => {
-              const label = (d.label || '').toLowerCase();
-              if (isUserTarget) {
-                return label.includes('front') || label.includes('user') || label.includes('selfie') || label.includes('facing front');
-              } else {
-                return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('facing back');
-              }
-            });
-            if (matchedDevice?.deviceId) {
-              targetDeviceId = matchedDevice.deviceId;
-            }
-          }
-        }
-      } catch {
-        // enumeration optional
-      }
-
+      // 2. Soft constraints: { ideal: facingMode }, audio: false
+      const targetFacing = facingMode || 'environment';
       let stream: MediaStream | null = null;
-      let lastErr: any = null;
 
-      // Tiered constraint candidates from specific to loose
-      const constraintCandidates: MediaStreamConstraints[] = [];
-
-      // 1. If we found a direct deviceId matching front/back, prioritize it
-      if (targetDeviceId) {
-        constraintCandidates.push({
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            deviceId: { exact: targetDeviceId },
+            facingMode: { ideal: targetFacing },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
           audio: false,
         });
-        constraintCandidates.push({
-          video: {
-            deviceId: { exact: targetDeviceId },
-          },
-          audio: false,
-        });
-      }
-
-      // 2. Ideal facing mode with 720p (most reliable resolution across mobile selfie cameras)
-      constraintCandidates.push({
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
-
-      // 3. Exact facingMode fallback
-      constraintCandidates.push({
-        video: {
-          facingMode: facingMode,
-        },
-        audio: false,
-      });
-
-      // 4. Loose ideal facingMode constraint
-      constraintCandidates.push({
-        video: {
-          facingMode: { ideal: facingMode },
-        },
-        audio: false,
-      });
-
-      // 5. Bare video stream fallback
-      constraintCandidates.push({
-        video: true,
-        audio: false,
-      });
-
-      // Execute tiered acquisition with automatic retry on NotReadableError / TrackStartError
-      for (const constraints of constraintCandidates) {
-        for (let attempt = 0; attempt < 2; attempt++) {
+      } catch (err: any) {
+        console.warn('Primary soft constraints failed:', err?.name, err?.message);
+        // Fall back to { video: true } if OverconstrainedError is thrown or secondary fails
+        if (err?.name === 'OverconstrainedError' || err?.name === 'ConstraintNotSatisfiedError') {
           try {
-            stream = await navigator.mediaDevices.getUserMedia(constraints);
-            if (stream) {
-              permissionGrantedRef.current = true;
-              break;
-            }
-          } catch (err: any) {
-            lastErr = err;
-            if (err.name === 'NotAllowedError' && !permissionGrantedRef.current) {
-              throw err;
-            }
-            // If the sensor was momentarily busy switching, wait 200ms and retry
-            if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-              await new Promise((r) => setTimeout(r, 200));
-            } else {
-              break; // Try next constraint candidate
-            }
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: { ideal: targetFacing } },
+              audio: false,
+            });
+          } catch {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          }
+        } else if (err?.name === 'NotReadableError' || err?.name === 'TrackStartError') {
+          // Hardware sensor temporarily busy (switching), pause 200ms and retry
+          await new Promise((r) => setTimeout(r, 200));
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: { ideal: targetFacing } },
+              audio: false,
+            });
+          } catch {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          }
+        } else {
+          // Fall back to bare { video: true }
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          } catch {
+            throw err;
           }
         }
-        if (stream) break;
       }
 
       if (!stream) {
-        throw lastErr || new Error('Could not access camera feed.');
+        throw new Error('Unable to obtain camera feed.');
       }
 
+      permissionGrantedRef.current = true;
       streamRef.current = stream;
+
+      // 3. Configure video element (autoPlay, playsInline, muted) and call play()
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute('playsinline', 'true');
         videoRef.current.setAttribute('webkit-playsinline', 'true');
-        await videoRef.current.play().catch(() => {});
+        videoRef.current.muted = true;
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn('video.play() failed on start:', playErr);
+        }
       }
 
-      // Automatically configure video track for continuous autofocus if supported
+      // Configure video track focus if supported
       try {
         const track = stream.getVideoTracks()[0];
         if (track && 'applyConstraints' in track) {
@@ -396,22 +421,18 @@ export default function GuestCameraPage() {
             await track.applyConstraints({ advanced: [adv] } as any);
           }
         }
-      } catch {
-        // capabilities check
-      }
+      } catch {}
     } catch (err: any) {
       console.error('Camera access error:', err);
       const isPermissionDenied =
         (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') &&
         !permissionGrantedRef.current;
 
-      if (isPermissionDenied) {
-        setCameraError('PERMISSION_DENIED');
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        setCameraError('Camera sensor is busy or temporarily unavailable. Tap below to retry switching.');
-      } else {
-        setCameraError(err.message || 'Could not access camera.');
-      }
+      setCameraError({
+        name: err.name || 'CameraError',
+        message: err.message || 'Could not access camera feed.',
+        isPermissionDenied,
+      });
     } finally {
       isStartingCameraRef.current = false;
     }
@@ -1007,14 +1028,23 @@ export default function GuestCameraPage() {
 
         {/* Camera Permission or Hardware Error */}
         {cameraError && (
-          <div className="absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center">
-            <AlertCircle className="w-12 h-12 text-rose-500 mb-3" />
+          <div className="absolute inset-0 z-30 bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center overflow-y-auto">
+            <AlertCircle className="w-12 h-12 text-rose-500 mb-3 shrink-0" />
             <h3 className="font-bold text-white text-base mb-1">
-              {cameraError === 'PERMISSION_DENIED' ? 'Camera Permission Blocked' : 'Camera Temporarily Unavailable'}
+              {cameraError.isPermissionDenied
+                ? 'Camera Permission Blocked'
+                : cameraError.isInAppBrowser
+                ? 'In-App Browser Detected'
+                : 'Camera Unavailable'}
             </h3>
-            
-            {cameraError === 'PERMISSION_DENIED' ? (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 my-4 max-w-xs text-left text-xs space-y-2 text-slate-300">
+
+            {/* Error Name & Message Badge */}
+            <div className="bg-rose-950/40 border border-rose-900/60 rounded-xl px-3 py-1.5 my-2 text-[11px] font-mono text-rose-300 max-w-xs break-all">
+              <span className="font-semibold">{cameraError.name}:</span> {cameraError.message}
+            </div>
+
+            {cameraError.isPermissionDenied ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 my-2 max-w-xs text-left text-xs space-y-2 text-slate-300">
                 <p className="font-semibold text-white">How to unblock in 2 taps:</p>
                 <ol className="list-decimal list-inside space-y-1 text-slate-400">
                   <li>Tap the <span className="text-white font-bold">Lock icon 🔒</span> or <span className="text-white font-bold">Page settings</span> icon in your address bar</li>
@@ -1022,16 +1052,22 @@ export default function GuestCameraPage() {
                   <li>Switch <span className="text-white font-bold">Camera</span> to <span className="text-emerald-400 font-bold">Allow</span></li>
                 </ol>
               </div>
-            ) : (
-              <p className="text-xs text-slate-300 max-w-xs my-3 leading-relaxed">{cameraError}</p>
-            )}
-            
-            <div className="flex flex-col w-full max-w-xs space-y-3">
+            ) : cameraError.isInAppBrowser ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 my-2 max-w-xs text-left text-xs space-y-2 text-slate-300">
+                <p className="font-semibold text-white">Open in your real browser:</p>
+                <p className="text-slate-400">
+                  Tap <span className="text-white font-bold">⋯</span> or <span className="text-white font-bold">⋮</span> in the top-right corner of this screen, then tap <span className="text-brand-400 font-bold">Open in Safari</span> or <span className="text-brand-400 font-bold">Open in Chrome</span>.
+                </p>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col w-full max-w-xs space-y-3 mt-3">
               <button
                 onClick={startCamera}
-                className="w-full py-3.5 rounded-2xl bg-white text-slate-900 text-xs font-bold hover:bg-slate-100 transition shadow-md active:scale-95 cursor-pointer"
+                className="w-full py-3.5 rounded-2xl bg-white text-slate-900 text-xs font-bold hover:bg-slate-100 transition shadow-md active:scale-95 cursor-pointer flex items-center justify-center space-x-2"
               >
-                Reload Camera Feed
+                <RefreshCw className="w-4 h-4" />
+                <span>Try again</span>
               </button>
 
               <label className="w-full py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition flex items-center justify-center space-x-2 border border-slate-700 cursor-pointer active:scale-95">
