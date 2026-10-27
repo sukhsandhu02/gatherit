@@ -479,8 +479,8 @@ export async function guestRoutes(fastify: FastifyInstance) {
       reply.setCookie('guest_token', token, {
         path: '/',
         httpOnly: true,
-        sameSite: 'lax',
-        secure: req.protocol === 'https',
+        sameSite: 'none',
+        secure: true,
       });
 
       // Fire-and-forget: retain join memory (does not affect response)
@@ -571,8 +571,8 @@ export async function guestRoutes(fastify: FastifyInstance) {
       reply.setCookie('guest_token', token, {
         path: '/',
         httpOnly: true,
-        sameSite: 'lax',
-        secure: req.protocol === 'https',
+        sameSite: 'none',
+        secure: true,
       });
 
       return {
@@ -592,7 +592,7 @@ export async function guestRoutes(fastify: FastifyInstance) {
 
   // Logout
   fastify.post('/api/logout', async (_req, reply) => {
-    reply.clearCookie('guest_token', { path: '/' });
+    reply.clearCookie('guest_token', { path: '/', sameSite: 'none', secure: true });
     return { success: true };
   });
 

@@ -61,8 +61,8 @@ export async function hostRoutes(fastify: FastifyInstance) {
       reply.setCookie('host_token', token, {
         path: '/',
         httpOnly: true,
-        sameSite: 'lax',
-        secure: req.protocol === 'https',
+        sameSite: 'none',
+        secure: true,
       });
 
       return {
@@ -119,8 +119,8 @@ export async function hostRoutes(fastify: FastifyInstance) {
       reply.setCookie('host_token', token, {
         path: '/',
         httpOnly: true,
-        sameSite: 'lax',
-        secure: req.protocol === 'https',
+        sameSite: 'none',
+        secure: true,
       });
 
       return {
@@ -137,7 +137,7 @@ export async function hostRoutes(fastify: FastifyInstance) {
 
   // Host Logout
   fastify.post('/api/host/logout', async (_req, reply) => {
-    reply.clearCookie('host_token', { path: '/' });
+    reply.clearCookie('host_token', { path: '/', sameSite: 'none', secure: true });
     return { success: true };
   });
 
@@ -191,8 +191,8 @@ export async function hostRoutes(fastify: FastifyInstance) {
       reply.setCookie('host_token', token, {
         path: '/',
         httpOnly: true,
-        sameSite: 'lax',
-        secure: req.protocol === 'https',
+        sameSite: 'none',
+        secure: true,
       });
 
       return { success: true, event: target };

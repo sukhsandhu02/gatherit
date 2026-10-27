@@ -69,7 +69,7 @@ await fastify.register(fastifyCookie, {
 await fastify.register(fastifyJwt, {
   secret: JWT_SECRET,
   cookie: {
-    cookieName: 'token',
+    cookieName: 'host_token',
     signed: false,
   },
 });
