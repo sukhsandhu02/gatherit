@@ -4,7 +4,7 @@ import { AlertCircle, Lock } from 'lucide-react';
 import { LogoMark } from '../../../components/Logo';
 import { JoinForm } from './components/JoinForm';
 import { ThemeToggle } from '../../../components/ThemeToggle';
-import { api } from '../../../lib/api';
+import { api, setGuestToken } from '../../../lib/api';
 
 export default function GuestJoinPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -65,6 +65,10 @@ export default function GuestJoinPage() {
         method: 'POST',
         body: JSON.stringify({ name, phone, password }),
       });
+
+      if (data.token) {
+        setGuestToken(data.token);
+      }
 
       if (data.guest.status === 'pending') {
         navigate('/waiting');

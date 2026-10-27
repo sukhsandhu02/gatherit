@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
-import { api, getApiUrl } from '../../../lib/api';
+import { api, getApiUrl, getWsUrl } from '../../../lib/api';
 import {
   RefreshCw,
   CheckCircle2,
@@ -107,8 +107,7 @@ export default function GuestCameraPage() {
 
     const connect = () => {
       if (!isMounted) return;
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+      socket = new WebSocket(getWsUrl('/ws'));
       socket.binaryType = 'arraybuffer';
       wsRef.current = socket;
 

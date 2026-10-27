@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
-import { api } from '../../../lib/api';
+import { api, setGuestToken } from '../../../lib/api';
 import { Phone, KeyRound, LogOut, ShieldCheck, CheckCircle2, Moon, Share2, Trash2, Copy, Plus } from 'lucide-react';
 import { ThemeToggle } from '../../../components/ThemeToggle';
 
@@ -132,6 +132,8 @@ export default function GuestMePage() {
     try {
       await api('/api/logout', { method: 'POST' });
     } finally {
+      setGuestToken(null);
+      cachedGuestProfile = null;
       navigate('/');
     }
   };

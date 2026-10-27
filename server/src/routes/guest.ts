@@ -4,6 +4,7 @@ import * as schema from '../db/schema.js';
 import { hashPassword, verifyPassword } from '../utils/crypto.js';
 import { normalizePhone } from '../utils/phone.js';
 import { requireGuest } from '../middleware/auth.js';
+import { getAuthCookieOptions, getClearCookieOptions } from '../utils/cookie.js';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
@@ -476,12 +477,7 @@ export async function guestRoutes(fastify: FastifyInstance) {
         eventId: eventRow.id,
       });
 
-      reply.setCookie('guest_token', token, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'none',
-        secure: true,
-      });
+      reply.setCookie('guest_token', token, getAuthCookieOptions());
 
       // Fire-and-forget: retain join memory (does not affect response)
       retainEventMemory(
@@ -568,12 +564,7 @@ export async function guestRoutes(fastify: FastifyInstance) {
         eventId: eventRow.id,
       });
 
-      reply.setCookie('guest_token', token, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'none',
-        secure: true,
-      });
+      reply.setCookie('guest_token', token, getAuthCookieOptions());
 
       return {
         success: true,
@@ -592,7 +583,7 @@ export async function guestRoutes(fastify: FastifyInstance) {
 
   // Logout
   fastify.post('/api/logout', async (_req, reply) => {
-    reply.clearCookie('guest_token', { path: '/', sameSite: 'none', secure: true });
+    reply.clearCookie('guest_token', getClearCookieOptions());
     return { success: true };
   });
 

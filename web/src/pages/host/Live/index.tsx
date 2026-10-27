@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { HostLayout } from '../../../layouts/HostLayout';
 import { Radio, Maximize2, Minimize2, Sparkles, AlertCircle, Share2 } from 'lucide-react';
-import { api } from '../../../lib/api';
+import { api, getWsUrl } from '../../../lib/api';
 
 interface LiveStreamTile {
   guestId: string;
@@ -121,9 +121,7 @@ export default function HostLivePage() {
 
     const connect = () => {
       if (!isMounted) return;
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-      socket = new WebSocket(wsUrl);
+      socket = new WebSocket(getWsUrl('/ws'));
       socketRef.current = socket;
       socket.binaryType = 'arraybuffer';
 

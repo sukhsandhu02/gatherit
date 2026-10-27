@@ -15,7 +15,14 @@ export interface GuestAuthPayload {
 }
 
 export async function requireHost(req: FastifyRequest, reply: FastifyReply) {
-  const hostToken = req.cookies.host_token;
+  let hostToken = req.cookies.host_token;
+  if (!hostToken && req.headers.authorization?.startsWith('Bearer ')) {
+    hostToken = req.headers.authorization.slice(7).trim();
+  }
+  if (!hostToken && (req.query as any)?.token) {
+    hostToken = (req.query as any).token;
+  }
+
   if (!hostToken) {
     return reply.status(401).send({ error: 'Unauthorized: host login required' });
   }

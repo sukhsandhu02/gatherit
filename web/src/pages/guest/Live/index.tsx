@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
-import { api } from '../../../lib/api';
+import { api, getWsUrl } from '../../../lib/api';
 import { ThemeToggle } from '../../../components/ThemeToggle';
 import {
   Radio,
@@ -161,9 +161,7 @@ export default function GuestLivePage() {
 
     const connect = () => {
       if (!isMounted) return;
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-      socket = new WebSocket(wsUrl);
+      socket = new WebSocket(getWsUrl('/ws'));
       wsRef.current = socket;
       socket.binaryType = 'arraybuffer';
 

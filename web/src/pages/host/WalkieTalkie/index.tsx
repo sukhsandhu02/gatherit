@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { HostLayout } from '../../../layouts/HostLayout';
-import { api } from '../../../lib/api';
+import { api, getWsUrl } from '../../../lib/api';
 import {
   Mic,
   Lock,
@@ -92,10 +92,8 @@ export default function HostWalkieTalkiePage() {
       })
       .catch(() => {});
 
-    // Connect to local WebSocket broker
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${window.location.host}/ws`;
-    const socket = new WebSocket(wsUrl);
+    // Connect to WebSocket broker
+    const socket = new WebSocket(getWsUrl('/ws'));
     wsRef.current = socket;
 
     socket.onopen = () => {

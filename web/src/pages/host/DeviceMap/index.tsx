@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { HostLayout } from '../../../layouts/HostLayout';
 import { useMesh } from '../../../lib/p2p/MeshContext';
 import { useTheme } from '../../../context/ThemeContext';
-import { api } from '../../../lib/api';
+import { api, getWsUrl } from '../../../lib/api';
 import {
   Radio,
   Share2,
@@ -163,8 +163,7 @@ export default function HostDeviceMapPage() {
     let pollInterval: any = null;
 
     const connect = () => {
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${proto}//${window.location.host}/ws`);
+      ws = new WebSocket(getWsUrl('/ws'));
 
       ws.onopen = () => {
         ws?.send(JSON.stringify({ type: 'get_locations' }));

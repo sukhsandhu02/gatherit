@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HostLayout } from '../../../layouts/HostLayout';
-import { api, getMediaUrl } from '../../../lib/api';
+import { api, getMediaUrl, getWsUrl } from '../../../lib/api';
 import { MediaGrid, type HostMediaItem } from './components/MediaGrid';
 import { SharePanel } from './components/SharePanel';
 import {
@@ -73,8 +73,7 @@ export default function HostGalleryPage() {
 
   // Real-time WebSocket updates for host gallery
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const ws = new WebSocket(getWsUrl('/ws'));
 
     ws.onmessage = (event) => {
       try {

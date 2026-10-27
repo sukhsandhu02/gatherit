@@ -24,6 +24,7 @@ const __dirname = path.dirname(__filename);
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const HOST = '0.0.0.0';
 const JWT_SECRET = process.env.JWT_SECRET || 'keepsake-default-secret-string-change-me-32chars';
+const COOKIE_SECRET = process.env.COOKIE_SECRET || JWT_SECRET;
 
 // Ensure data/media directory exists
 export const MEDIA_DIR = path.resolve(__dirname, '../data/media');
@@ -42,6 +43,7 @@ export const fastify = Fastify({
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
   },
   disableRequestLogging: false,
+  trustProxy: true,
 });
 
 fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
@@ -56,14 +58,35 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, bo
     done(err, undefined);
   }
 });
+
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'https://gatherit.onrender.com';
+const allowedOrigins = Array.from(
+  new Set([
+    CLIENT_ORIGIN,
+    'https://gatherit.onrender.com',
+    'https://gatherit-server.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:8080',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:8080',
+  ].filter(Boolean))
+);
+
 await fastify.register(fastifyCors, {
-  origin: ['https://gatherit.onrender.com'],
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin) || origin.endsWith('.onrender.com')) {
+      return cb(null, true);
+    }
+    return cb(null, false);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 });
 // Register Plugins
 await fastify.register(fastifyCookie, {
-  secret: JWT_SECRET,
+  secret: COOKIE_SECRET,
 });
 
 await fastify.register(fastifyJwt, {
@@ -411,7 +434,7 @@ fastify.get('/ws', { websocket: true }, (socket, req) => {
   if (!candidateHostToken) {
     try {
       const url = new URL(req.url, 'http://localhost');
-      candidateHostToken = url.searchParams.get('token') || undefined;
+      candidateHostToken = url.searchParams.get('host_token') || url.searchParams.get('token') || undefined;
     } catch {}
   }
   if (!candidateHostToken && req.headers.authorization?.startsWith('Bearer ')) {
@@ -435,7 +458,7 @@ fastify.get('/ws', { websocket: true }, (socket, req) => {
   if (!guestToken) {
     try {
       const url = new URL(req.url, 'http://localhost');
-      guestToken = url.searchParams.get('token') || undefined;
+      guestToken = url.searchParams.get('guest_token') || url.searchParams.get('token') || undefined;
     } catch {}
   }
   if (!guestToken && req.headers.authorization?.startsWith('Bearer ')) {

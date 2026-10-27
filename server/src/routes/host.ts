@@ -4,6 +4,7 @@ import * as schema from '../db/schema.js';
 import { hashPassword, verifyPassword } from '../utils/crypto.js';
 import { generateSlug, generateTempCode } from '../utils/slug.js';
 import { requireHost } from '../middleware/auth.js';
+import { getAuthCookieOptions, getClearCookieOptions } from '../utils/cookie.js';
 import { eq, desc, and, inArray } from 'drizzle-orm';
 import fs from 'fs';
 import path from 'path';
@@ -58,15 +59,11 @@ export async function hostRoutes(fastify: FastifyInstance) {
         .returning();
 
       const token = fastify.jwt.sign({ role: 'host', eventId: newEvent.id });
-      reply.setCookie('host_token', token, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'none',
-        secure: true,
-      });
+      reply.setCookie('host_token', token, getAuthCookieOptions());
 
       return {
         success: true,
+        token,
         event: {
           id: newEvent.id,
           name: newEvent.name,
@@ -116,15 +113,11 @@ export async function hostRoutes(fastify: FastifyInstance) {
       }
 
       const token = fastify.jwt.sign({ role: 'host', eventId: existingEvent.id });
-      reply.setCookie('host_token', token, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'none',
-        secure: true,
-      });
+      reply.setCookie('host_token', token, getAuthCookieOptions());
 
       return {
         success: true,
+        token,
         event: {
           id: existingEvent.id,
           name: existingEvent.name,
@@ -137,7 +130,7 @@ export async function hostRoutes(fastify: FastifyInstance) {
 
   // Host Logout
   fastify.post('/api/host/logout', async (_req, reply) => {
-    reply.clearCookie('host_token', { path: '/', sameSite: 'none', secure: true });
+    reply.clearCookie('host_token', getClearCookieOptions());
     return { success: true };
   });
 
@@ -188,14 +181,9 @@ export async function hostRoutes(fastify: FastifyInstance) {
       }
 
       const token = fastify.jwt.sign({ role: 'host', eventId: target.id });
-      reply.setCookie('host_token', token, {
-        path: '/',
-        httpOnly: true,
-        sameSite: 'none',
-        secure: true,
-      });
+      reply.setCookie('host_token', token, getAuthCookieOptions());
 
-      return { success: true, event: target };
+      return { success: true, token, event: target };
     });
 
     // Delete an event

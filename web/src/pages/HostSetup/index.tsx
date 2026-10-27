@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { HeartHandshake, AlertCircle } from 'lucide-react';
 import { SetupForm } from './components/SetupForm';
 import { ThemeToggle } from '../../components/ThemeToggle';
-import { api } from '../../lib/api';
+import { api, setHostToken } from '../../lib/api';
 
 export default function HostSetup() {
   const navigate = useNavigate();
@@ -43,10 +43,14 @@ export default function HostSetup() {
         ? { password, eventId: selectedEventId || undefined }
         : { name, date, password };
 
-      await api(endpoint, {
-     method: 'POST',
-     body: JSON.stringify(payload),
-    });
+      const data: any = await api(endpoint, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      if (data?.token) {
+        setHostToken(data.token);
+      }
 
       navigate('/host/event');
     } catch (err: any) {

@@ -16,7 +16,7 @@ import {
   Menu,
   X,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, setHostToken } from '../lib/api';
 import { LogoMark } from '../components/Logo';
 import { ThemeToggle } from '../components/ThemeToggle';
 
@@ -61,16 +61,20 @@ export function HostLayout({ children, eventName }: HostLayoutProps) {
     try {
       await api('/api/host/logout', { method: 'POST' });
     } finally {
+      setHostToken(null);
       navigate('/host/setup');
     }
   };
 
   const handleSwitchEvent = async (eventId: string) => {
     try {
-      await api('/api/host/events/switch', {
+      const res: any = await api('/api/host/events/switch', {
         method: 'POST',
         body: JSON.stringify({ eventId }),
       });
+      if (res?.token) {
+        setHostToken(res.token);
+      }
       setDropdownOpen(false);
       window.location.reload();
     } catch (err: any) {

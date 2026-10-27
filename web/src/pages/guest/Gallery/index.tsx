@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GuestLayout } from '../../../layouts/GuestLayout';
-import { api, getMediaUrl } from '../../../lib/api';
+import { api, getMediaUrl, getWsUrl } from '../../../lib/api';
 import { Archive, Video, Image as ImageIcon, Folder, FolderOpen, LayoutGrid, ChevronDown, Trash2, Radio } from 'lucide-react';
 import { useMesh } from '../../../lib/p2p/MeshContext';
 import { MeshStatusBadge } from '../../../components/p2p/MeshStatusBadge';
@@ -66,8 +66,7 @@ export default function GuestGalleryPage() {
 
   // Listen for real-time gallery updates from Host
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    const ws = new WebSocket(getWsUrl('/ws'));
 
     ws.onmessage = (event) => {
       try {

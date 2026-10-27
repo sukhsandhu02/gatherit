@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { LogoMark } from '../../../components/Logo';
 import { LoginForm } from './components/LoginForm';
-import { api } from '../../../lib/api';
+import { api, setGuestToken } from '../../../lib/api';
 
 export default function GuestLoginPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -25,6 +25,10 @@ export default function GuestLoginPage() {
         method: 'POST',
         body: JSON.stringify({ phone, password }),
       });
+
+      if (data.token) {
+        setGuestToken(data.token);
+      }
 
       if (data.guest.status === 'pending') {
         navigate('/waiting');

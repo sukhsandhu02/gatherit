@@ -6,13 +6,17 @@ services:
     repo: https://github.com/sukhsandhu02/gatherit
     branch: main
     rootDir: .
-    buildCommand: npm install && npm --prefix server run build
+    buildCommand: npm install && npm --prefix web run build && npm --prefix server run build
     startCommand: npm --prefix server start
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: COOKIE_SECRET
+        sync: false
+      - key: CLIENT_ORIGIN
+        value: https://gatherit.onrender.com
       - key: NODE_ENV
         value: production
       - key: HINDSIGHT_API_KEY
@@ -29,6 +33,9 @@ services:
     rootDir: .
     buildCommand: npm install && npm --prefix web run build
     staticPublishPath: web/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://gatherit-server.onrender.com
     routes:
       - type: rewrite
         source: /*

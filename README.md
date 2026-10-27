@@ -84,6 +84,22 @@ npm start
 
 ---
 
+## 🌐 Render Deployment Environment Variables
+
+When deploying GatherIt on Render (e.g. `gatherit-server` and `gatherit-web`), configure the following environment variables:
+
+### Backend (`gatherit-server`):
+- `DATABASE_URL`: PostgreSQL connection string (Neon or Render Postgres).
+- `JWT_SECRET`: Secret key used for signing host and guest JWTs.
+- `COOKIE_SECRET`: Secret key used for signing cookies (defaults to `JWT_SECRET` if not specified).
+- `CLIENT_ORIGIN`: Exact frontend URL for CORS (e.g. `https://gatherit.onrender.com`).
+- `NODE_ENV`: Set to `production`.
+
+### Frontend (`gatherit-web`):
+- `VITE_API_URL`: Backend API URL (e.g. `https://gatherit-server.onrender.com`).
+
+---
+
 ## 🔐 Security Model
 
 - Host routes are gated by a cryptographically signed session cookie.
