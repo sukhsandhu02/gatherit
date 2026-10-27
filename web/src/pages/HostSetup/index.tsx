@@ -43,10 +43,10 @@ export default function HostSetup() {
         ? { password, eventId: selectedEventId || undefined }
         : { name, date, password };
 
-      const data = await api(endpoint, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
+      await api(endpoint, {
+     method: 'POST',
+     body: JSON.stringify(payload),
+    });
 
       navigate('/host/event');
     } catch (err: any) {

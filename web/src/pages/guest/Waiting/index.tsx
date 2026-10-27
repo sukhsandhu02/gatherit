@@ -1,6 +1,6 @@
 import { Hourglass, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../lib/api';
+import { api } from '../../../lib/api';
 
 export default function GuestWaitingPage() {
   const navigate = useNavigate();
